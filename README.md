@@ -1,7 +1,4 @@
 # Barry Discord Bot
-
-![Barry Bot Banner](https://raw.githubusercontent.com/raximnuraliyev/Barry-Discord-Bot/main/assets/banner.png)
-
 <p align="center">
   <img src="https://img.shields.io/github/license/raximnuraliyev/Barry-Discord-Bot?style=flat-square" alt="License">
   <img src="https://img.shields.io/github/stars/raximnuraliyev/Barry-Discord-Bot?style=flat-square" alt="Stars">
@@ -72,12 +69,6 @@ Contributions, issues and feature requests are welcome!
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a pull request
-
----
-
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
