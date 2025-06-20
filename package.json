@@ -1,0 +1,29 @@
+{
+  "name": "barry-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot named Barry with welcome/farewell messages, auto-replies, and AI responses",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.10.0",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "openai": "^4.104.0"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "nodejs",
+    "ai"
+  ],
+  "author": "Rakhim",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
