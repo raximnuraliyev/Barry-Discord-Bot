@@ -1,135 +1,123 @@
-# Barry: The AI-Driven Discord Server Manager Bot
+# <img src="https://cdn-icons-png.flaticon.com/512/5968/5968756.png" alt="Barry Bot" width="40"/> Barry: The AI-Driven Discord Server Manager Bot
 
-Barry is a comprehensive Discord moderation and community management bot with a dynamic AI-powered personality system. He's designed to be both a reliable moderator and an engaging community member with his own unique character.
+> **Barry** is a next-generation Discord moderation and community management bot, powered by AI and designed to be both a reliable moderator and a vibrant, engaging server member with a unique personality.
 
-## Features
+---
+
+## ✨ Features
 
 ### 🤖 AI Personality System
-- Dynamic responses based on message content and context
-- Personality-driven interactions with server members
-- Configurable response categories (greetings, humor, insults, etc.)
-- Optional integration with OpenRouter API for advanced AI responses
+- Dynamic, context-aware responses
+- Configurable personality categories (greetings, humor, insults, etc.)
+- Optional OpenRouter API integration for advanced AI replies
 
 ### 🛡️ Advanced Moderation
-- Automatic offensive language detection
-- Progressive punishment system (warn → timeout → ban)
-- Spam detection and prevention
-- Unauthorized invite link removal
-- Suspicious account monitoring
-- Raid detection and alerts
+- Automatic offensive language & spam detection
+- Progressive punishments (warn → timeout → ban)
+- Invite link & suspicious account monitoring
+- Raid detection & alerts
 
 ### 📊 Activity Monitoring
-- User activity tracking
-- Inactivity check-ins with personalized messages
-- Automatic flagging of inactive users to moderators
+- Tracks user activity & inactivity
+- Personalized inactivity check-ins
+- Flags inactive users for moderators
 - Opt-out system for check-ins
 
 ### 📝 Logging & Reporting
 - Comprehensive action logging
-- Private moderator channel (#barry-mods)
-- User moderation history reports
-- Server statistics and analytics
+- Private moderator channel (`#barry-mods`)
+- User moderation history & analytics
 - Moderator notes system
 
 ### 🔧 Slash Commands
-- `/askbarry` - Ask Barry a question
-- `/report [user]` - View user's moderation history
-- `/note [user] [note]` - Add private moderator notes
-- `/serverstats` - Display server statistics
-- `/optoutcheckins` - Opt out of inactivity check-ins
-- `/warn [user] [reason]` - Warn a user
-- `/timeout [user] [duration] [reason]` - Timeout a user
+- `/askbarry` — Ask Barry a question
+- `/report [user]` — View user's moderation history
+- `/note [user] [note]` — Add private moderator notes
+- `/serverstats` — Display server statistics
+- `/optoutcheckins` — Opt out of inactivity check-ins
+- `/warn [user] [reason]` — Warn a user
+- `/timeout [user] [duration] [reason]` — Timeout a user
 
-## Installation
+---
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Set up your environment variables in `.env`:
-   ```
-   BOT_TOKEN=your_discord_bot_token
-   OPENROUTER_API_KEY=your_openrouter_api_key (optional)
-   ```
-4. Start the bot:
-   ```bash
-   npm start
-   ```
+## 🚀 Quick Start
 
-## Configuration
+```bash
+# 1. Clone the repository
+$ git clone https://github.com/raximnuraliyev/Barry-Discord-Bot.git
 
-### Bot Permissions Required
-- Read Messages
-- Send Messages
-- Manage Messages
-- Kick Members
-- Ban Members
-- Moderate Members (Timeout)
+# 2. Install dependencies
+$ npm install
+
+# 3. Configure environment variables in `.env`
+BOT_TOKEN=your_discord_bot_token
+OPENROUTER_API_KEY=your_openrouter_api_key (optional)
+
+# 4. Start the bot
+$ npm start
+```
+
+---
+
+## ⚙️ Configuration
+
+### Required Bot Permissions
+- Read/Send/Manage Messages
+- Kick/Ban/Timeout Members
 - Manage Channels
 - View Audit Log
 
 ### Environment Variables
-- `BOT_TOKEN`: Your Discord bot token (required)
-- `OPENROUTER_API_KEY`: OpenRouter API key for AI responses (optional)
+- `BOT_TOKEN` — Your Discord bot token (**required**)
+- `OPENROUTER_API_KEY` — OpenRouter API key (**optional**)
 
-## File Structure
+---
 
-```
-├── index.js                 # Main bot entry point
+## 📁 File Structure
+
+```text
+barry-bot/
+├── index.js                  # Main bot entry point
 ├── src/
-│   ├── ai-personality.js    # AI personality handler
-│   ├── moderation.js        # Moderation functions
-│   ├── database.js          # Database operations
-│   ├── commands.js          # Slash command handlers
-│   └── inactivity.js        # Inactivity monitoring
-├── barry-personality.json   # Personality response database
-├── database.json           # User data and logs
-└── README.md               # This file
+│   ├── ai-personality.js     # AI personality handler
+│   ├── moderation.js         # Moderation functions
+│   ├── database.js           # Database operations
+│   ├── commands.js           # Slash command handlers
+│   └── inactivity.js         # Inactivity monitoring
+├── barry-personality.json    # Personality response database
+├── database.json             # User data and logs
+└── README.md                 # This file
 ```
 
-## Personality System
+---
 
-Barry's personality is driven by:
+## 🧠 Personality System
+- **JSON Response Bank:** Categorized responses for different situations
+- **Keyword Detection:** Context-aware response selection
+- **AI Integration:** Optional OpenRouter API for dynamic replies
+- **Cooldown System:** Prevents spam, keeps Barry engaging
 
-1. **JSON Response Bank**: Categorized responses for different situations
-2. **Keyword Detection**: Context-aware response selection
-3. **AI Integration**: Optional OpenRouter API for dynamic responses
-4. **Cooldown System**: Prevents spam while maintaining engagement
+**Categories:**
+- Greetings, Insults, Goodnight, Questions, Humor, Random
 
-### Personality Categories
-- **Greetings**: Welcome messages and hellos
-- **Insults**: Friendly banter and playful roasts
-- **Goodnight**: Sleep-related responses
-- **Questions**: Responses to user questions
-- **Humor**: Jokes and funny remarks
-- **Random**: Miscellaneous personality responses
+---
 
-## Moderation Features
+## 🛡️ Moderation Features
+- **Automatic Actions:**
+  - 1st Offense: Warning
+  - 2nd Offense: Timeout
+  - 3rd Offense: Ban
+- **Detection:**
+  - Offensive language, spam, invite links, account age, raids
+- **Logging:**
+  - User, action, reason, moderator, timestamp, strike count
 
-### Automatic Actions
-- **First Offense**: Warning
-- **Second Offense**: Timeout (configurable duration)
-- **Third Offense**: Ban
+---
 
-### Detection Systems
-- Offensive language filtering
-- Spam detection (repeated messages)
-- Invite link scanning
-- Account age verification
-- Raid detection (multiple rapid joins)
+## 🗄️ Database Structure
 
-### Logging
-All moderation actions are logged with:
-- User information
-- Action type and reason
-- Moderator (human or auto)
-- Timestamp
-- Strike count
-
-## Database Structure
-
-The bot uses a JSON file database with the following structure:
+<details>
+<summary>Click to expand JSON structure</summary>
 
 ```json
 {
@@ -170,61 +158,34 @@ The bot uses a JSON file database with the following structure:
   }
 }
 ```
+</details>
 
-## Usage Examples
+---
 
-### Basic Interaction
-```
+## 💬 Usage Examples
+
+```text
 User: @Barry how are you?
 Barry: Better than you, obviously.
-```
 
-### Moderation Commands
-```
 /warn @user Spamming in general chat
 /timeout @user 60 Repeated rule violations
 /report @user
-```
-
-### Server Management
-```
 /serverstats
 /note @user Helpful community member
 ```
 
-## Customization
+---
 
-### Adding New Personality Responses
-Edit `barry-personality.json` to add new responses to any category:
+## 🛠️ Customization
 
-```json
-{
-  "greetings": [
-    "Your new greeting here"
-  ]
-}
-```
+- **Add Personality Responses:** Edit `barry-personality.json`
+- **Change Offensive Words:** Edit `offensiveWords` in `src/moderation.js`
+- **Adjust Inactivity:** Change interval in `index.js` or database settings
 
-### Modifying Offensive Words
-Edit the `offensiveWords` array in `src/moderation.js`:
+---
 
-```javascript
-this.offensiveWords = [
-  'word1', 'word2', 'word3'
-];
-```
-
-### Adjusting Inactivity Settings
-Modify the check interval in `index.js` or database settings:
-
-```javascript
-// Check every 6 hours (adjust as needed)
-setInterval(() => {
-  this.inactivity.checkInactiveUsers(this.client);
-}, 6 * 60 * 60 * 1000);
-```
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -232,10 +193,14 @@ setInterval(() => {
 4. Test thoroughly
 5. Submit a pull request
 
-## License
+---
 
-This project is licensed under the MIT License.
+## 📄 License
 
-## Support
+MIT License
 
-For issues or questions, please create an issue on the GitHub repository.
+---
+
+## 💡 Support
+
+For issues or questions, [create an issue](https://github.com/raximnuraliyev/Barry-Discord-Bot/issues) on GitHub.
