@@ -1,5 +1,10 @@
-> **AI-powered Discord Bot!** <img src="https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/discord.svg" alt="Discord Logo" width="24" style="vertical-align:middle;"/>
+<!-- Logo moved to bottom -->
 
+---
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/discord.svg" alt="Discord Logo" width="48" style="vertical-align:middle;"/>
+</p>
 ---
 
 ## 🌟 Introduction
