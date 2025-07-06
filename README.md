@@ -1,4 +1,4 @@
-<img src="https://media.discordapp.net/attachments/112233445566778899/1234567890123456789/Discord-logo-animation.gif" alt="Barry waving" width="40"/>
+<img src="https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/2b4c56c3-794f-424b-8bad-f3e456144423/dfv0fny-3094882f-83be-4ed8-95a8-cde46cb78881.gif" alt="Barry waving" width="40"/>
 
 > **AI-powered Discord Bot!**
 
