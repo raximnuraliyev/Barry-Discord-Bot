@@ -1,4 +1,4 @@
-> **AI-powered Discord Bot!** <img src="https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/discord.svg" alt="Discord Logo" width="24" style="vertical-align:middle;"/>
+> **AI-powered Discord Bot!** <img src="https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/discord.svg" alt="Discord Logo" width="30" style="vertical-align:middle;"/>
 
 ---
 
