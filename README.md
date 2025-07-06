@@ -2,30 +2,30 @@
 
 ---
 
-## 🌟 Introduction
+## Introduction
 Meet **Barry Bot** — your server’s resident wisecracker, trivia champ, and all-around digital pal! Barry’s got a quick wit, a big heart, and just enough sass to keep things interesting. Whether you need a clever comeback, a friendly nudge, or someone to keep the peace, Barry’s always ready to jump in and make your Discord feel like home (with a few jokes along the way).
 
 ---
 
-## 📝 Description
+## Description
 
 Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js, and OpenAI. He can chat in character, answer questions wisely, and keep your server lively and safe. Whether you need a moderator, a trivia master, or just a friend to banter with, Barry’s got you covered!
 
 ---
 
-## ✨ Features
+## Features
 
-- 🤖 **AI Personality** — Barry chats, jokes, and responds in character
-- 🛡️ **Moderation** — Keeps your server safe from spam and bad vibes
-- 🎲 **Games & Fun** — Play games and enjoy interactive features
-- 📚 **Smart Q&A** — Ask Barry anything, get wise (or witty) answers
-- 📈 **Activity Tracking** — Monitors user activity and engagement
-- 📝 **Logging & Reports** — Keeps moderators in the loop
-- ⚙️ **Customizable** — Tweak Barry’s personality and rules
+- **AI Personality** — Barry chats, jokes, and responds in character
+- **Moderation** — Keeps your server safe from spam and bad vibes
+- **Games & Fun** — Play games and enjoy interactive features
+- **Smart Q&A** — Ask Barry anything, get wise (or witty) answers
+- **Activity Tracking** — Monitors user activity and engagement
+- **Logging & Reports** — Keeps moderators in the loop
+- **Customizable** — Tweak Barry’s personality and rules
 
 ---
 
-## 🧰 Tech Stack
+## Tech Stack
 
 - Node.js
 - Discord.js
@@ -35,7 +35,7 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 
 ---
 
-## 🚀 Installation
+## Installation
 
 1. **Clone the repo:**
    ```bash
@@ -59,7 +59,7 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 
 ---
 
-## 💡 Usage
+## Usage
 
 - **Chat with Barry:**
   ```
@@ -79,7 +79,7 @@ Barry will reply in character, keep things fun, and help manage your community!
 
 ---
 
-## 🛠️ Commands
+## Commands
 
 | Command                                   | Description                    |
 |--------------------------------------------|--------------------------------|
@@ -93,7 +93,7 @@ Barry will reply in character, keep things fun, and help manage your community!
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome all friendly faces! To contribute:
 1. Fork this repo
