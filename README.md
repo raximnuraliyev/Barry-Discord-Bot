@@ -1,5 +1,4 @@
-> **AI-powered Discord Bot!** 
-
+> **AI-powered Discord Bot!**
 
 ---
 
