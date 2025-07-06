@@ -1,2 +1,7 @@
 node_modules
 .env
+barry-ask-responses.json
+barry-personality.json
+database.json
+inactive-users.json
+log.json
