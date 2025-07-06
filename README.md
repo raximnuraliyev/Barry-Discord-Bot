@@ -1,121 +1,132 @@
-# Barry Bot: Your Cozy Discord Server Companion
+# Barry Bot <img src="https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif" alt="Barry waving" width="40"/>
 
-<p align="center">
-  <img src="https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif" alt="Barry waving" width="120"/>
-</p>
-
-> <b>Welcome to Barry Bot!</b> <br>
-> <i>Your friendly, AI-powered Discord server manager who keeps your community safe, lively, and full of personality.</i>
+> **Your witty, AI-powered Discord companion!**
 
 ---
 
-## ✨ What is Barry Bot?
+## 🌟 Introduction
 
-Barry Bot is a warm-hearted, AI-driven Discord bot designed to make your server feel like home. Whether you need moderation, fun AI conversations, or just a little help keeping things organized, Barry is always there—reliable, witty, and ready to lend a hand. Barry brings a unique personality to your community, making every interaction feel special.
-
----
-
-## ✔️ Features
-
-- ✅ **AI Personality System** — Dynamic, context-aware replies that make Barry feel like a real friend
-- ✅ **Advanced Moderation** — Automatic detection of offensive language, spam, and raids
-- ✅ **Activity Monitoring** — Tracks user activity and checks in on inactive members
-- ✅ **Comprehensive Logging** — Keeps moderators in the loop with detailed logs and reports
-- ✅ **Slash Commands** — Easy-to-use commands for moderation, stats, and more
-- ✅ **Customizable** — Tweak Barry's personality, moderation rules, and more to fit your community
+Welcome to **Barry Bot** — the cozy, clever, and endlessly entertaining Discord bot! Barry brings warmth, wisdom, and a dash of sass to your server, making every chat more fun and every community feel like home.
 
 ---
 
-## 🛠️ Tech Stack
+## 📝 Description
+
+Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js, and OpenAI. He can chat in character, answer questions wisely, play games, and keep your server lively and safe. Whether you need a moderator, a trivia master, or just a friend to banter with, Barry’s got you covered!
+
+---
+
+## ✨ Features
+
+- 🤖 **AI Personality** — Barry chats, jokes, and responds in character
+- 🛡️ **Moderation** — Keeps your server safe from spam and bad vibes
+- 🎲 **Games & Fun** — Play games and enjoy interactive features
+- 📚 **Smart Q&A** — Ask Barry anything, get wise (or witty) answers
+- 📈 **Activity Tracking** — Monitors user activity and engagement
+- 📝 **Logging & Reports** — Keeps moderators in the loop
+- ⚙️ **Customizable** — Tweak Barry’s personality and rules
+
+---
+
+## 🧰 Tech Stack
 
 - Node.js
 - Discord.js
 - dotenv
-- OpenRouter API (optional, for advanced AI)
+- OpenAI API (or OpenRouter API)
 - JSON for data storage
 
 ---
 
-## 🚀 Installation Guide
+## 🚀 Installation
 
-1. **Clone the repository**
+1. **Clone the repo:**
    ```bash
    git clone https://github.com/raximnuraliyev/Barry-Discord-Bot.git
    cd Barry-Discord-Bot
    ```
-2. **Install dependencies**
+2. **Install dependencies:**
    ```bash
    npm install
    ```
-3. **Set up your environment variables**
-   - Create a `.env` file in the root directory:
+3. **Configure environment:**
+   - Create a `.env` file:
      ```env
      BOT_TOKEN=your_discord_bot_token
      OPENROUTER_API_KEY=your_openrouter_api_key (optional)
      ```
-4. **Start Barry!**
+4. **Start Barry:**
    ```bash
    npm start
    ```
 
-> _Barry will greet you in your server and start working his magic!_
-
 ---
 
-## 💡 Usage Instructions
+## 💡 Usage
 
-- **Ask Barry a question:**
+- **Chat with Barry:**
   ```
-  /askbarry What's the weather like?
+  @Barry tell me a joke!
   ```
-  _Barry will reply with a witty, AI-powered answer!_
-
+- **Ask a question:**
+  ```
+  /askbarry What's the meaning of life?
+  ```
 - **Moderate users:**
   ```
-  /warn @user Please follow the rules!
+  /warn @user Please be kind!
   /timeout @user 60 Spamming
-  /report @user
   ```
-  _Barry keeps your community safe and friendly._
 
-- **Check server stats:**
-  ```
-  /serverstats
-  ```
-  _Barry gives you a cozy overview of your server's health._
+Barry will reply in character, keep things fun, and help manage your community!
 
 ---
 
-## 🖼️ Screenshots
+## 🛠️ Commands
 
-> _Add your favorite screenshots here to show Barry in action!_
->
-> <p align="center">
->   <img src="screenshots/barry-bot-demo.png" alt="Barry Bot Demo" width="400"/>
-> </p>
+| Command                | Description                              |
+|------------------------|------------------------------------------|
+| `/askbarry`            | Ask Barry anything                       |
+| `/report [user]`       | View user's moderation history           |
+| `/note [user] [note]`  | Add private moderator notes              |
+| `/serverstats`         | Show server statistics                   |
+| `/optoutcheckins`      | Opt out of inactivity check-ins          |
+| `/warn [user] [reason]`| Warn a user                              |
+| `/timeout [user] [duration] [reason]` | Timeout a user           |
 
 ---
 
-## 🤗 Contributing
+## 🤝 Contributing
 
-We love friendly faces! If you’d like to help Barry grow, please:
-
-1. Fork this repository
+We welcome all friendly faces! To contribute:
+1. Fork this repo
 2. Create a feature branch
-3. Make your changes with care
+3. Make your changes
 4. Test thoroughly
 5. Open a pull request with a kind note
 
-> _All contributions, big or small, are welcome. Thank you for making Barry even better!_
+> _Thank you for helping Barry grow!_
 
 ---
 
-## 📄 License
+## 📜 License
 
 MIT License
 
 ---
 
-## 🌱 Stay Cozy & Connected
+## 🙏 Credits
 
-For questions, ideas, or a warm hello, [open an issue](https://github.com/raximnuraliyev/Barry-Discord-Bot/issues) or join the conversation. Barry and the community are always happy to help!
+- Inspired by the Discord and open-source communities
+- Powered by Node.js, Discord.js, and OpenAI
+- Special thanks to all contributors and users!
+
+---
+
+## 📬 Contact
+
+For questions, ideas, or a warm hello:
+- [Open an issue](https://github.com/raximnuraliyev/Barry-Discord-Bot/issues)
+- Or join the conversation in your favorite Discord server!
+
+> _Barry and the community are always happy to help!_
