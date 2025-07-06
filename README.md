@@ -1,7 +1,4 @@
-<img src="https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/2b4c56c3-794f-424b-8bad-f3e456144423/dfv0fny-3094882f-83be-4ed8-95a8-cde46cb78881.gif" alt="Barry waving" width="40"/>
-
-
-> **AI-powered Discord Bot!**
+> **AI-powered Discord Bot!** <img src="https://github.com/raximnuraliyev/Barry-Discord-Bot/assets/raximnuraliyev/2e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e/discord-logo.png" alt="Discord Logo" width="28" style="vertical-align:middle; margin-left:8px;"/>
 
 ---
 
