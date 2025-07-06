@@ -1,4 +1,4 @@
-> **AI-powered Discord Bot!** <img src="https://github.com/raximnuraliyev/Barry-Discord-Bot/assets/raximnuraliyev/2e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e/discord-logo.png" alt="Discord Logo" width="28" style="vertical-align:middle; margin-left:8px;"/>
+> **AI-powered Discord Bot!** <img src="https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/discord.svg" alt="Discord Logo" width="24" style="vertical-align:middle;"/>
 
 ---
 
