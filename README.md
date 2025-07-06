@@ -1,7 +1,3 @@
-> **AI-powered Discord Bot!**
-
----
-
 ## Introduction
 Meet **Barry Bot** — your server’s resident wisecracker, trivia champ, and all-around digital pal! Barry’s got a quick wit, a big heart, and just enough sass to keep things interesting. Whether you need a clever comeback, a friendly nudge, or someone to keep the peace, Barry’s always ready to jump in and make your Discord feel like home (with a few jokes along the way).
 
