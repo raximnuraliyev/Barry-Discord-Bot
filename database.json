@@ -13,12 +13,12 @@
     "1165864378491486258-1314090276997828658": {
       "userId": "1165864378491486258",
       "guildId": "1314090276997828658",
-      "strikes": 14,
-      "lastActivity": 1751805881224,
+      "strikes": 15,
+      "lastActivity": 1751818466077,
       "optedOutCheckins": true,
       "missedCheckins": 0,
-      "lastMessage": "ayayayya",
-      "lastMessageTime": 1751805881226
+      "lastMessage": "cat",
+      "lastMessageTime": 1751818466079
     },
     "1085892090086576218-1314090276997828658": {
       "userId": "1085892090086576218",
@@ -939,6 +939,16 @@
       "moderator": "Barry (Auto)",
       "timestamp": "2025-07-06T12:42:04.892Z",
       "duration": 1800000
+    },
+    {
+      "id": 1751817297287.8506,
+      "userId": "1165864378491486258",
+      "guildId": "1314090276997828658",
+      "action": "notify_mods",
+      "reason": "Offensive language: \"fag\"",
+      "moderator": "Barry (Auto)",
+      "timestamp": "2025-07-06T15:54:57.287Z",
+      "duration": null
     }
   ],
   "notes": {

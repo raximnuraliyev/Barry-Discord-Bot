@@ -103,6 +103,28 @@ class InactivityHandler {
             await modChannel.send({ embeds: [embed] });
         }
     }
+
+    /**
+     * Returns a list of users inactive in the last 24 hours for all guilds.
+     * Each entry: { userId, username, lastActivity, guildId }
+     */
+    async getInactiveUsersList(client) {
+        const allInactive = [];
+        for (const guild of client.guilds.cache.values()) {
+            const inactiveUsers = this.database.getInactiveUsers(guild.id, 1); // 1 day inactivity
+            for (const userData of inactiveUsers) {
+                const member = guild.members.cache.get(userData.userId);
+                if (!member) continue;
+                allInactive.push({
+                    userId: userData.userId,
+                    username: member.user.tag,
+                    lastActivity: userData.lastActivity,
+                    guildId: guild.id
+                });
+            }
+        }
+        return allInactive;
+    }
 }
 
 module.exports = InactivityHandler;
