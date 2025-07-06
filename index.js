@@ -40,7 +40,7 @@ class BarryBot {
         });
 
         this.client.on('messageCreate', async (message) => {
-            if (message.author.bot) return;
+            if (message.author.bot || message.author.id === this.client.user.id) return;
 
             // Update user activity
             this.database.updateUserActivity(message.author.id, message.guild.id);
@@ -48,11 +48,53 @@ class BarryBot {
             // Check for moderation violations
             await this.moderation.checkMessage(message);
 
-            // Handle personality responses
-            if (message.mentions.has(this.client.user) || message.content.toLowerCase().includes('barry')) {
-                const response = await this.personality.generateResponse(message);
+            // Only reply if Barry is mentioned or 'barry' is in the message
+            const barryRegex = /b+a+r+y+/i;
+            const isDirectMention = message.mentions.has(this.client.user);
+            const isBarryText = barryRegex.test(message.content);
+            if (isDirectMention || isBarryText) {
+                // Remove the mention from the message content if present
+                let cleanedContent = message.content;
+                if (isDirectMention) {
+                    cleanedContent = cleanedContent.replace(new RegExp(`<@!?${this.client.user.id}>`, 'g'), '').trim();
+                }
+                // Prepare context for AI
+                const aiPrompt = {
+                    user: cleanedContent,
+                    personality: this.personality.personalityData.description
+                };
+                // Generate AI response
+                let response = await this.personality.generateAIResponse({
+                    content: cleanedContent,
+                    noActions: true
+                });
                 if (response) {
-                    message.reply(response);
+                    // Remove any action-style text (e.g., *chuckles*, *winks*, etc.)
+                    response = response.replace(/\*[^*]+\*/g, '').replace(/_([^_]+)_/g, '$1').trim();
+                    // Send as an embed with Barry's username and avatar
+                    message.channel.send({
+                        embeds: [{
+                            description: response,
+                            color: 0x7289da,
+                            author: {
+                                name: 'Barry',
+                                icon_url: this.client.user.displayAvatarURL()
+                            }
+                        }]
+                    });
+                    // Log the interaction
+                    const logPath = path.join(__dirname, 'log.json');
+                    let logs = [];
+                    try {
+                        logs = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+                    } catch {}
+                    logs.push({
+                        timestamp: new Date().toISOString(),
+                        user: message.author.tag,
+                        userMessage: cleanedContent,
+                        barryReply: response
+                    });
+                    fs.writeFileSync(logPath, JSON.stringify(logs, null, 2));
                 }
             }
         });
@@ -79,6 +121,28 @@ class BarryBot {
         setInterval(() => {
             this.inactivity.checkInactiveUsers(this.client);
         }, 6 * 60 * 60 * 1000);
+
+        // Generate and send inactive user report every 24 hours
+        setInterval(async () => {
+            const inactiveList = await this.inactivity.getInactiveUsersList(this.client);
+            const staffRoleId = process.env.BARRY_STAFF_ROLE_ID || null; // Set this in your .env
+            const modChannel = this.client.channels.cache.find(
+                ch => ch.name === 'barry-mods' && ch.type === 0 // 0 = GUILD_TEXT
+            );
+            if (modChannel && inactiveList && inactiveList.length > 0) {
+                // Save to inactive-users.json
+                const inactivePath = path.join(__dirname, 'inactive-users.json');
+                fs.writeFileSync(inactivePath, JSON.stringify(inactiveList, null, 2));
+                // Build mention string for staff
+                const staffMention = staffRoleId ? `<@&${staffRoleId}>` : '@here';
+                // Build user list
+                const userList = inactiveList.map(u => `<@${u.userId}>`).join(', ');
+                // Send report
+                modChannel.send({
+                    content: `${staffMention} Inactive users in the last 24h: ${userList}`
+                });
+            }
+        }, 24 * 60 * 60 * 1000);
     }
 
     async start() {
