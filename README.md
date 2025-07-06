@@ -1,4 +1,4 @@
-# Barry Bot <img src="https://www.deviantart.com/fishnchips1411/art/Discord-logo-animation-959081038" alt="Barry waving" width="40"/>
+<img src="https://media.discordapp.net/attachments/112233445566778899/1234567890123456789/Discord-logo-animation.gif" alt="Barry waving" width="40"/>
 
 > **AI-powered Discord Bot!**
 
