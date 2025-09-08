@@ -83,6 +83,20 @@ class CommandHandler {
                         .setRequired(true)
                 )
                 .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
+            
+            new SlashCommandBuilder()
+                .setName('inactiveusers')
+                .setDescription('Show the list of currently inactive users (mods only)')
+                .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
+            
+            new SlashCommandBuilder()
+                .setName('alert')
+                .setDescription('Send an alert about rule-adjacent behavior')
+                .addStringOption(option =>
+                    option.setName('reason')
+                        .setDescription('Reason for the alert')
+                        .setRequired(true)
+                ),
         ];
     }
 
@@ -121,6 +135,12 @@ class CommandHandler {
                     break;
                 case 'timeout':
                     await this.handleTimeout(interaction);
+                    break;
+                case 'inactiveusers':
+                    await this.handleInactiveUsers(interaction);
+                    break;
+                case 'alert':
+                    await this.handleAlert(interaction);
                     break;
                 default:
                     await interaction.reply({ content: 'Unknown command!', ephemeral: true });
@@ -343,6 +363,58 @@ class CommandHandler {
             console.error('Failed to timeout user:', error);
             await interaction.reply({ content: 'Failed to timeout user!', ephemeral: true });
         }
+    }
+
+    async handleInactiveUsers(interaction) {
+        const staffRoleId = process.env.BARRY_STAFF_ROLE_ID || null;
+        const inactivePath = path.join(__dirname, '../inactive-users.json');
+        let inactiveList = [];
+        try {
+            inactiveList = JSON.parse(fs.readFileSync(inactivePath, 'utf8'));
+        } catch {
+            inactiveList = [];
+        }
+        if (!inactiveList.length) {
+            await interaction.reply({ content: 'There are no inactive users in the last 24h.', flags: 64 });
+            return;
+        }
+        const userList = inactiveList.map(u => `<@${u.userId}>`).join(', ');
+        const embed = new EmbedBuilder()
+            .setColor(0x7289da)
+            .setTitle('Inactive Users (last 24h)')
+            .setDescription(userList)
+            .setTimestamp();
+        await interaction.reply({ embeds: [embed], flags: 64 });
+    }
+
+    async handleAlert(interaction) {
+        const reason = interaction.options.getString('reason');
+        const guild = interaction.guild;
+        const staffRoleId = process.env.BARRY_STAFF_ROLE_ID || null;
+        const staffRole = staffRoleId ? guild.roles.cache.get(staffRoleId) : null;
+        const modChannel = guild.channels.cache.find(ch => ch.name === 'barry-mods' && ch.type === 0);
+        const staffMembers = staffRole ? staffRole.members : guild.members.cache.filter(m => m.permissions.has(PermissionsBitField.Flags.ModerateMembers));
+        // Load rules summary from README
+        let rulesSummary = 'Please review our server rules.';
+        try {
+            const readme = fs.readFileSync(path.join(__dirname, '../README.md'), 'utf8');
+            const rulesSection = readme.split('## Features')[1]?.split('---')[0];
+            if (rulesSection) rulesSummary = "Server Rules: " + rulesSection.trim();
+        } catch {}
+        // DM all mods
+        for (const member of staffMembers.values()) {
+            try {
+                await member.send(`ALERT: Rule-adjacent behavior reported.\nReason: ${reason}\n${rulesSummary}`);
+            } catch {}
+        }
+        // Tag mods in #barry-mods
+        if (modChannel) {
+            const staffPing = staffRoleId ? `<@&${staffRoleId}>` : '@here';
+            await modChannel.send({
+                content: `${staffPing} ALERT: Rule-adjacent behavior reported.\nReason: ${reason}\n${rulesSummary}`
+            });
+        }
+        await interaction.reply({ content: 'Alert sent to all mods.', flags: 64 });
     }
 }
 

@@ -595,20 +595,34 @@ class ModerationHandler {
       "WILLIES",
       "xrated",
       "XRATED",
-      "卍",
-      "blonded"
+      "卍"
       // Add more offensive words as needed
     ];
     this.joinTimes = new Map();
     this.recentJoins = [];
   }
 
-  async checkMessage(message) {
-    const content = message.content.toLowerCase();
+  normalizeText(text) {
+    // Convert to lowercase
+    let normalized = text.toLowerCase();
+    // Replace common leetspeak and unicode variants
+    const charMap = {
+      '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '$': 's', '@': 'a', '!': 'i', '|': 'i', '(': 'c', ')': 'c', '+': 't', '€': 'e', '£': 'l', '¥': 'y', '¢': 'c', '§': 's', '¿': 'i', 'ß': 'b', 'æ': 'ae', 'ø': 'o', 'œ': 'oe', 'ç': 'c', 'ñ': 'n', 'ü': 'u', 'ö': 'o', 'ä': 'a', 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ａ': 'a', 'ｂ': 'b', 'ｃ': 'c', 'ｄ': 'd', 'ｅ': 'e', 'ｆ': 'f', 'ｇ': 'g', 'ｈ': 'h', 'ｉ': 'i', 'ｊ': 'j', 'ｋ': 'k', 'ｌ': 'l', 'ｍ': 'm', 'ｎ': 'n', 'ｏ': 'o', 'ｐ': 'p', 'ｑ': 'q', 'ｒ': 'r', 'ｓ': 's', 'ｔ': 't', 'ｕ': 'u', 'ｖ': 'v', 'ｗ': 'w', 'ｘ': 'x', 'ｙ': 'y', 'ｚ': 'z', ' ': '', '-': '', '_': '', '.': '', ',': '', ':': '', ';': '', '?': '', '/': '', '\\': '', '*': '', '^': '', '%': '', '#': '', '&': '', '=': '', '[': '', ']': '', '{': '', '}': '', '"': '', '\'': '', '`': '', '~': '', '<': '', '>': ''
+    };
+    normalized = normalized.split('').map(c => charMap[c] || c).join('');
+    // Remove extra spaces and punctuation
+    normalized = normalized.replace(/\s+/g, '');
+    return normalized;
+  }
 
-    // Check for offensive words
+  async checkMessage(message) {
+    const content = message.content;
+    const normalized = this.normalizeText(content);
+
+    // Check for offensive words in both raw and normalized text
     for (const word of this.offensiveWords) {
-      if (content.includes(word)) {
+      const wordNorm = this.normalizeText(word);
+      if (content.toLowerCase().includes(word.toLowerCase()) || normalized.includes(wordNorm)) {
         await this.handleOffensiveContent(message, word);
         return;
       }
@@ -838,24 +852,57 @@ class ModerationHandler {
   }
 
   async handleInviteLink(message) {
-    // Check if user has permission to post invites
-    if (
-      message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)
-    ) {
-      return; // Allow mods to post invites
-    }
+      // Check if user has permission to post invites
+      if (message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
+        return; // Allow mods to post invites
+      }
 
-    await message.delete();
-    await this.warnUser(message, "Unauthorized invite link");
+      const userId = message.author.id;
+      const guildId = message.guild.id;
+      const userData = this.database.getUserData(userId, guildId);
+      const inviteStrikes = userData.inviteStrikes || 0;
 
-    this.database.logAction({
-      userId: message.author.id,
-      guildId: message.guild.id,
-      action: "warn",
-      reason: "Unauthorized invite link",
-      moderator: "Barry (Auto)",
-      timestamp: new Date().toISOString(),
-    });
+      // Delete the message
+      try {
+        await message.delete();
+      } catch (error) {
+        console.error("Failed to delete invite message:", error);
+      }
+
+      let action = "warn";
+      let duration = null;
+
+      if (inviteStrikes === 0) {
+        action = "warn";
+        await this.warnUser(message, "Posting Discord server invites is not allowed. This is your first warning.");
+      } else if (inviteStrikes === 1) {
+        action = "timeout";
+        duration = 1 * 60 * 1000;
+        await this.timeoutUser(message, duration, "Second time posting Discord server invite. You are timed out for 1 minute.");
+      } else if (inviteStrikes === 2) {
+        action = "timeout";
+        duration = 5 * 60 * 1000;
+        await this.timeoutUser(message, duration, "Third time posting Discord server invite. You are timed out for 5 minutes.");
+      } else {
+        action = "ban";
+        await this.banUser(message, "Repeated posting of Discord server invites. You are banned.");
+      }
+
+      // Log the action
+      this.database.logAction({
+        userId: userId,
+        guildId: guildId,
+        action: action,
+        reason: "Discord server invite violation",
+        moderator: "Barry (Auto)",
+        timestamp: new Date().toISOString(),
+        duration: duration,
+      });
+
+      // Update inviteStrikes
+      this.database.updateUserData(userId, guildId, {
+        inviteStrikes: inviteStrikes + 1
+      });
   }
 
   async handleMemberJoin(member) {

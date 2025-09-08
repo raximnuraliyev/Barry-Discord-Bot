@@ -129,7 +129,7 @@ class BarryBot {
             const modChannel = this.client.channels.cache.find(
                 ch => ch.name === 'barry-mods' && ch.type === 0 // 0 = GUILD_TEXT
             );
-            if (modChannel && inactiveList && inactiveList.length > 0) {
+            if (modChannel && inactiveList && inactiveList.length > 0) {j
                 // Save to inactive-users.json
                 const inactivePath = path.join(__dirname, 'inactive-users.json');
                 fs.writeFileSync(inactivePath, JSON.stringify(inactiveList, null, 2));
