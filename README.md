@@ -5,6 +5,18 @@
 
 ---
 
+## What's New (Sep 2025)
+
+- **Advanced Invite Moderation:**
+  - Barry now deletes Discord server invites, times out repeat offenders (1 min, 5 min), and bans after multiple violations.
+- **Obfuscated Word Detection:**
+  - Barry detects and deletes messages containing offensive words, even if users use leetspeak, Unicode, or punctuation to bypass filters.
+- **/alert Command:**
+  - Any member can use `/alert` to notify all mods in #barry-mods and DM them with a reason. Great for reporting rule-adjacent behavior.
+- **Improved Inactivity Reporting:**
+  - Daily and periodic inactivity checks, with mod notifications and user tracking.
+
+
 ## Table of Contents
 - [Introduction](#introduction)
 - [Description](#description)
@@ -36,6 +48,10 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 - **Activity Tracking** — Monitors user activity and engagement
 - **Logging & Reports** — Keeps moderators in the loop
 - **Customizable** — Tweak Barry’s personality and rules
+
+- **Invite Link Protection** — Deletes Discord server invites, escalates punishments for repeat offenders
+- **Obfuscated Word Filtering** — Detects banned words even if disguised
+- **/alert Command** — Lets anyone quickly notify all mods
 
 ---
 
@@ -103,6 +119,8 @@ Barry will reply in character, keep things fun, and help manage your community!
 | `/optoutcheckins`                         | Opt out of inactivity check-ins|
 | `/warn [user] [reason]`                   | Warn a user                    |
 | `/timeout [user] [duration] [reason]`     | Timeout a user                 |
+
+| `/alert [reason]`                         | Notify all mods about rule-adjacent behavior |
 
 ---
 
