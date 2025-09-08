@@ -475,7 +475,6 @@ class ModerationHandler {
       "ovary",
       "p0rn",
       "P0RN",
-      "pac",
       "pawn",
       "PAWN",
       "pecker",
