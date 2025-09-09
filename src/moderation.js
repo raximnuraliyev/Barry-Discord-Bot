@@ -601,27 +601,12 @@ class ModerationHandler {
     this.recentJoins = [];
   }
 
-  normalizeText(text) {
-    // Convert to lowercase
-    let normalized = text.toLowerCase();
-    // Replace common leetspeak and unicode variants
-    const charMap = {
-      '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '$': 's', '@': 'a', '!': 'i', '|': 'i', '(': 'c', ')': 'c', '+': 't', '€': 'e', '£': 'l', '¥': 'y', '¢': 'c', '§': 's', '¿': 'i', 'ß': 'b', 'æ': 'ae', 'ø': 'o', 'œ': 'oe', 'ç': 'c', 'ñ': 'n', 'ü': 'u', 'ö': 'o', 'ä': 'a', 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ａ': 'a', 'ｂ': 'b', 'ｃ': 'c', 'ｄ': 'd', 'ｅ': 'e', 'ｆ': 'f', 'ｇ': 'g', 'ｈ': 'h', 'ｉ': 'i', 'ｊ': 'j', 'ｋ': 'k', 'ｌ': 'l', 'ｍ': 'm', 'ｎ': 'n', 'ｏ': 'o', 'ｐ': 'p', 'ｑ': 'q', 'ｒ': 'r', 'ｓ': 's', 'ｔ': 't', 'ｕ': 'u', 'ｖ': 'v', 'ｗ': 'w', 'ｘ': 'x', 'ｙ': 'y', 'ｚ': 'z', ' ': '', '-': '', '_': '', '.': '', ',': '', ':': '', ';': '', '?': '', '/': '', '\\': '', '*': '', '^': '', '%': '', '#': '', '&': '', '=': '', '[': '', ']': '', '{': '', '}': '', '"': '', '\'': '', '`': '', '~': '', '<': '', '>': ''
-    };
-    normalized = normalized.split('').map(c => charMap[c] || c).join('');
-    // Remove extra spaces and punctuation
-    normalized = normalized.replace(/\s+/g, '');
-    return normalized;
-  }
-
   async checkMessage(message) {
-    const content = message.content;
-    const normalized = this.normalizeText(content);
+    const content = message.content.toLowerCase();
 
-    // Check for offensive words in both raw and normalized text
+    // Check for offensive words
     for (const word of this.offensiveWords) {
-      const wordNorm = this.normalizeText(word);
-      if (content.toLowerCase().includes(word.toLowerCase()) || normalized.includes(wordNorm)) {
+      if (content.includes(word.toLowerCase())) {
         await this.handleOffensiveContent(message, word);
         return;
       }
