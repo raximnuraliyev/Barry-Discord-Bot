@@ -1,8 +1,10 @@
 node_modules
 .env
+# Add all JSON files
 barry-ask-responses.json
 barry-personality.json
 database.json
 inactive-users.json
 log.json
 reminders.json
+*.json
