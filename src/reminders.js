@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const REMINDERS_FILE = path.join(__dirname, '../reminders.json');
+const REMINDERS_FILE = path.join(__dirname, '..', 'reminders.json');
 
 function loadReminders() {
     if (!fs.existsSync(REMINDERS_FILE)) return [];
@@ -30,7 +30,7 @@ function removeReminder(id) {
 
 function updateReminder(reminder) {
     let reminders = loadReminders();
-    const idx = reminders.findIndex(r => r.id === reminder.id);
+    const idx = reminders.findIndex(r => r.id === reminder.id || r.reminder_id === reminder.id);
     if (idx !== -1) {
         reminders[idx] = reminder;
         saveReminders(reminders);
@@ -56,7 +56,7 @@ function getDueReminders() {
 }
 
 function getReminderById(id) {
-    return loadReminders().find(r => r.id == id);
+    return loadReminders().find(r => r.id == id || r.reminder_id == id);
 }
 
 module.exports = {
