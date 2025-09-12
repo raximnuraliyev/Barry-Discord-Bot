@@ -40,14 +40,17 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 
 ## Features
 
-**AI Personality** — Barry chats, jokes, and responds in character
-**Moderation** — Keeps your server safe from spam, invites, and bad vibes
-**Smart Q&A** — Ask Barry anything, get wise (or witty) answers
-**Activity Tracking** — Monitors user activity and engagement
-**Logging & Reports** — Keeps moderators in the loop
-**Invite Link Protection** — Deletes Discord server invites, escalates punishments for repeat offenders
-**Obfuscated Word Filtering** — Detects banned words even if disguised
-**/alert Command** — Lets anyone quickly notify all mods
+| Feature                      | Description                                                                                 |
+|------------------------------|---------------------------------------------------------------------------------------------|
+| **AI Personality**           | Barry chats, jokes, and responds in character                                               |
+| **Moderation**               | Keeps your server safe from spam, invites, and bad vibes                                    |
+| **Smart Q&A**                | Ask Barry anything, get wise (or witty) answers                                             |
+| **Activity Tracking**        | Monitors user activity and engagement                                                       |
+| **Logging & Reports**        | Keeps moderators in the loop                                                                |
+| **Invite Link Protection**   | Deletes Discord server invites, escalates punishments for repeat offenders                  |
+| **Obfuscated Word Filtering**| Detects banned words even if disguised                                                      |
+| **/alert Command**           | Lets anyone quickly notify all mods                                                         |
+
 
 ---
 
