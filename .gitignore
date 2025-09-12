@@ -1,4 +1,4 @@
-git rm --cached package-lock.json reminders.json
+git rm --cached reminders.json
 node_modules/
-*.json
 .env
+*.json
