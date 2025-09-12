@@ -748,7 +748,7 @@ class ModerationHandler {
   async warnUser(message, reason) {
     const embed = new EmbedBuilder()
       .setColor(0xffff00)
-      .setTitle("⚠️ Warning")
+      .setTitle("Warning")
       .setDescription(`${message.author}, you've been warned for: ${reason}`)
       .setTimestamp();
 
@@ -761,7 +761,7 @@ class ModerationHandler {
 
       const embed = new EmbedBuilder()
         .setColor(0xff8c00)
-        .setTitle("🔇 User Timed Out")
+        .setTitle("User Timed Out")
         .setDescription(
           `${message.author} has been timed out for ${
             duration / 60000
@@ -781,7 +781,7 @@ class ModerationHandler {
 
       const embed = new EmbedBuilder()
         .setColor(0xff0000)
-        .setTitle("🔨 User Banned")
+        .setTitle("User Banned")
         .setDescription(
           `${message.author.tag} has been banned.\nReason: ${reason}`
         )

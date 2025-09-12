@@ -7,14 +7,12 @@
 
 ## What's New (Sep 2025)
 
-- **Advanced Invite Moderation:**
-  - Barry now deletes Discord server invites, times out repeat offenders (1 min, 5 min), and bans after multiple violations.
-- **Obfuscated Word Detection:**
-  - Barry detects and deletes messages containing offensive words, even if users use leetspeak, Unicode, or punctuation to bypass filters.
-- **/alert Command:**
-  - Any member can use `/alert` to notify all mods in #barry-mods and DM them with a reason. Great for reporting rule-adjacent behavior.
-- **Improved Inactivity Reporting:**
-  - Daily and periodic inactivity checks, with mod notifications and user tracking.
+
+**What's Working (Sep 2025):**
+- Invite moderation: Barry deletes Discord server invites and escalates punishments for repeat offenders.
+- Obfuscated word filtering: Detects and deletes disguised banned words.
+- `/alert` command: Notifies all mods in #barry-mods and DMs them with a reason.
+- Inactivity reporting: Daily and periodic checks, mod notifications, and user tracking.
 
 
 ## Table of Contents
@@ -41,17 +39,15 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 ---
 
 ## Features
-- **AI Personality** — Barry chats, jokes, and responds in character
-- **Moderation** — Keeps your server safe from spam and bad vibes
-- **Games & Fun** — Play games and enjoy interactive features
-- **Smart Q&A** — Ask Barry anything, get wise (or witty) answers
-- **Activity Tracking** — Monitors user activity and engagement
-- **Logging & Reports** — Keeps moderators in the loop
-- **Customizable** — Tweak Barry’s personality and rules
 
-- **Invite Link Protection** — Deletes Discord server invites, escalates punishments for repeat offenders
-- **Obfuscated Word Filtering** — Detects banned words even if disguised
-- **/alert Command** — Lets anyone quickly notify all mods
+**AI Personality** — Barry chats, jokes, and responds in character
+**Moderation** — Keeps your server safe from spam, invites, and bad vibes
+**Smart Q&A** — Ask Barry anything, get wise (or witty) answers
+**Activity Tracking** — Monitors user activity and engagement
+**Logging & Reports** — Keeps moderators in the loop
+**Invite Link Protection** — Deletes Discord server invites, escalates punishments for repeat offenders
+**Obfuscated Word Filtering** — Detects banned words even if disguised
+**/alert Command** — Lets anyone quickly notify all mods
 
 ---
 
@@ -90,19 +86,20 @@ Barry is a fun, AI-powered, and witty Discord bot built with Node.js, Discord.js
 
 ## Usage
 
-- **Chat with Barry:**
-  ```
-  @Barry tell me a joke!
-  ```
-- **Ask a question:**
-  ```
-  /askbarry What's the meaning of life?
-  ```
-- **Moderate users:**
-  ```
-  /warn @user Please be kind!
-  /timeout @user 60 Spamming
-  ```
+
+**Chat with Barry:**
+```
+@Barry tell me a joke!
+```
+**Ask a question:**
+```
+/askbarry What's the meaning of life?
+```
+**Moderate users:**
+```
+/warn @user Please be kind!
+/timeout @user 60 Spamming
+```
 
 Barry will reply in character, keep things fun, and help manage your community!
 
@@ -112,29 +109,33 @@ Barry will reply in character, keep things fun, and help manage your community!
 
 | Command                                   | Description                    |
 |--------------------------------------------|--------------------------------|
-| `/askbarry`                               | Ask Barry anything             |
-| `/report [user]`                          | View user's moderation history |
-| `/note [user] [note]`                     | Add private moderator notes    |
-| `/serverstats`                            | Show server statistics         |
-| `/optoutcheckins`                         | Opt out of inactivity check-ins|
-| `/warn [user] [reason]`                   | Warn a user                    |
-| `/timeout [user] [duration] [reason]`     | Timeout a user                 |
 
+
+| `/askbarry [question]`                    | Ask Barry anything             |
+| `/report [user]`                          | View a user's moderation history (mods only) |
+| `/note [user] [note]`                     | Add a private note about a user (mods only) |
+| `/serverstats`                            | View server statistics (mods only) |
+| `/optoutcheckins`                         | Opt out of inactivity check-ins |
+| `/warn [user] [reason]`                   | Warn a user (mods only)         |
+| `/timeout [user] [duration] [reason]`     | Timeout a user (mods only)      |
+| `/inactiveusers`                          | Show the list of currently inactive users (mods only) |
 | `/alert [reason]`                         | Notify all mods about rule-adjacent behavior |
+| `/remindme [time] [message] [repeat] [privacy]` | Set a reminder (with optional repeat and privacy) |
 
 ---
 
 ## Required JSON Files
 
+
 Barry Bot uses several JSON files for data storage and configuration. Make sure these files exist in your project root (they can be empty or pre-filled as needed):
 
-- `barry-ask-responses.json` — Stores custom responses for Barry's Q&A features.
-- `barry-personality.json` — Contains Barry's personality traits and dialogue options.
-- `database.json` — Main data storage for user stats, moderation logs, etc.
-- `inactive-users.json` — Tracks users who are inactive for activity monitoring.
-- `log.json` — Stores logs and reports for moderation and activity.
+- `barry-ask-responses.json` — Custom Q&A responses
+- `barry-personality.json` — Personality traits and dialogue
+- `database.json` — User stats and moderation logs
+- `inactive-users.json` — Inactivity tracking
+- `log.json` — Moderation and activity logs
 
-> You can create these files manually or copy them from a template if provided. They are ignored by git for privacy and security.
+You can create these files manually or copy them from a template if provided. They are ignored by git for privacy and security.
 
 ---
 

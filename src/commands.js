@@ -115,6 +115,11 @@ class CommandHandler {
                     option.setName('repeat')
                         .setDescription('Repeat interval (e.g., every day, every 8h)')
                         .setRequired(false)
+                )
+                .addStringOption(option =>
+                    option.setName('privacy')
+                        .setDescription('Privacy: public or private')
+                        .setRequired(false)
                 ),
             new SlashCommandBuilder()
                 .setName('reminders')
@@ -258,7 +263,7 @@ class CommandHandler {
 
         const embed = new EmbedBuilder()
             .setColor(0x0099FF)
-            .setTitle(`📋 Report for ${user.tag}`)
+            .setTitle(`Report for ${user.tag}`)
             .setThumbnail(user.displayAvatarURL())
             .addFields(
                 { name: 'User ID', value: user.id, inline: true },
@@ -294,7 +299,7 @@ class CommandHandler {
         
         const embed = new EmbedBuilder()
             .setColor(0x00FF00)
-            .setTitle('✅ Note Added')
+            .setTitle('Note Added')
             .setDescription(`Added note for ${user.tag}: "${note}"`)
             .setTimestamp();
 
@@ -329,7 +334,7 @@ class CommandHandler {
         
         const embed = new EmbedBuilder()
             .setColor(0x00FF00)
-            .setTitle('✅ Opted Out')
+            .setTitle('Opted Out')
             .setDescription('You have been opted out of inactivity check-ins.')
             .setTimestamp();
 
@@ -444,18 +449,31 @@ class CommandHandler {
             const rulesSection = readme.split('## Features')[1]?.split('---')[0];
             if (rulesSection) rulesSummary = "Server Rules: " + rulesSection.trim();
         } catch {}
+        // Prepare pretty embed
+        const alertColors = [0xe74c3c, 0xf39c12, 0x8e44ad, 0x16a085, 0x2980b9];
+        const alertEmojis = ['🚨'];
+        const color = alertColors[Math.floor(Math.random() * alertColors.length)];
+        const emoji = alertEmojis[Math.floor(Math.random() * alertEmojis.length)];
+        const alertEmbed = {
+            color,
+            title: `${emoji} Alert: Community Behavior`,
+            description: `**${reason}**\n\nPlease review and discuss with fellow staff if this needs action or attention. Stay proactive and keep our community safe and welcoming!`,
+            fields: [
+            { name: 'Reported By', value: `<@${interaction.user.id}>`, inline: true },
+            { name: 'Server', value: guild.name, inline: true }
+            ],
+            footer: { text: 'Barry Bot Alert' },
+            timestamp: new Date()
+        };
         // DM all mods
         for (const member of staffMembers.values()) {
             try {
-                await member.send(`ALERT: Rule-adjacent behavior reported.\nReason: ${reason}\n${rulesSummary}`);
+                await member.send({ embeds: [alertEmbed] });
             } catch {}
         }
-        // Tag mods in #barry-mods
+        // Send to #barry-mods (no mention)
         if (modChannel) {
-            const staffPing = staffRoleId ? `<@&${staffRoleId}>` : '@here';
-            await modChannel.send({
-                content: `${staffPing} ALERT: Rule-adjacent behavior reported.\nReason: ${reason}\n${rulesSummary}`
-            });
+            await modChannel.send({ embeds: [alertEmbed] });
         }
         await interaction.reply({ content: 'Alert sent to all mods.', flags: 64 });
     }
@@ -464,6 +482,7 @@ class CommandHandler {
         const timeStr = interaction.options.getString('time');
         const message = interaction.options.getString('message');
         const repeatStr = interaction.options.getString('repeat');
+        const privacy = (interaction.options.getString('privacy') || 'public').toLowerCase();
         const userId = interaction.user.id;
         const channelId = interaction.channelId;
         const now = Date.now();
@@ -481,16 +500,35 @@ class CommandHandler {
             }
         }
         const remindAt = now + ms;
+        // Generate a unique reminder_id
+        const reminder_id = `${userId}-${Date.now()}-${Math.floor(Math.random()*10000)}`;
         const reminder = {
-            id: now + Math.random(),
-            userId,
-            channelId,
+            id: reminder_id,
+            userId: userId,
+            channelId: channelId,
+            privacy: privacy === 'private' ? 'private' : 'public',
+            message: message,
             time: remindAt,
-            message,
             repeat: repeatMs
         };
         reminders.addReminder(reminder);
-        await interaction.reply({ content: `⏰ Reminder set for ${timeStr}${repeatMs ? `, repeating every ${repeatStr}` : ''}: ${message}`, flags: 64 });
+        const colors = [0x2ecc71, 0xf1c40f, 0x9b59b6, 0x1abc9c, 0xe67e22, 0x3498db];
+        const emojis = ['⏰', '🦄', '🌈', '✨', '🎉', '🍀', '💡', '📅'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+        const embed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle(`${emoji} Reminder Set`)
+            .setDescription(`**${message}**`)
+            .addFields(
+                { name: 'Time', value: `<t:${Math.floor(remindAt/1000)}:F>`, inline: true },
+                { name: 'Repeat', value: repeatMs ? repeatStr : 'No', inline: true },
+                { name: 'Type', value: privacy, inline: true },
+                { name: 'Reminder ID', value: reminder_id, inline: false }
+            )
+            .setFooter({ text: `Barry Bot` })
+            .setTimestamp(new Date(remindAt));
+        await interaction.reply({ embeds: [embed], flags: 64 });
     }
 
     async handleReminders(interaction) {
@@ -498,16 +536,51 @@ class CommandHandler {
         const action = interaction.options.getString('action') || 'list';
         const id = interaction.options.getString('id');
         const value = interaction.options.getString('value');
+        const targetUser = interaction.options.getUser ? interaction.options.getUser('user') : null;
+        const modRoleIds = process.env.BARRY_MOD_ROLE_IDS ? process.env.BARRY_MOD_ROLE_IDS.split(',') : [];
+        const memberRoles = interaction.member?.roles?.cache ? Array.from(interaction.member.roles.cache.keys()) : [];
+        const isMod = interaction.member?.permissions?.has(PermissionsBitField.Flags.ModerateMembers) || memberRoles.some(rid => modRoleIds.includes(rid));
+        let viewUserId = userId;
+        if (targetUser) viewUserId = targetUser.id;
         if (action === 'list') {
-            const userReminders = reminders.getUserReminders(userId);
-            if (!userReminders.length) {
-                await interaction.reply({ content: 'You have no active reminders.', flags: 64 });
+            let allReminders = reminders.loadReminders();
+            let visibleReminders;
+            if (viewUserId === userId || isMod) {
+                visibleReminders = allReminders.filter(r => r.user_id === viewUserId);
+            } else {
+                await interaction.reply({ content: 'You do not have permission to view these reminders.', flags: 64 });
                 return;
             }
-            const lines = userReminders.map(r => `• ID: ${r.id}\n<t:${Math.floor(r.time/1000)}:R> — ${r.message}${r.repeat ? ' (repeats)' : ''}`);
-            await interaction.reply({ content: `Your reminders:\n${lines.join('\n')}`, flags: 64 });
+            if (!visibleReminders.length) {
+                await interaction.reply({ content: 'No active reminders found.', flags: 64 });
+                return;
+            }
+            const colors = [0x2ecc71, 0xf1c40f, 0x9b59b6, 0x1abc9c, 0xe67e22, 0x3498db];
+            const emojis = ['🔔', '⏰', '🦄', '🌈', '✨', '🎉', '🍀', '💡', '📅'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(`${emoji} Reminders for <@${viewUserId}>`)
+                .setDescription('Active reminders:')
+                .addFields(
+                    ...visibleReminders.map((r, i) => ({
+                        name: `${i+1}. [${r.type.toUpperCase()}] <t:${Math.floor(new Date(r.time_to_send).getTime()/1000)}:F>`,
+                        value: `**${r.message}**\nID: ${r.reminder_id}`,
+                        inline: false
+                    }))
+                )
+                .setFooter({ text: `Barry Bot` })
+                .setTimestamp();
+            await interaction.reply({ embeds: [embed], flags: 64 });
         } else if (action === 'cancel' && id) {
-            reminders.removeReminder(Number(id));
+            let allReminders = reminders.loadReminders();
+            let r = allReminders.find(r => r.reminder_id == id && (r.user_id === userId || isMod));
+            if (!r) {
+                await interaction.reply({ content: 'Reminder not found or permission denied.', flags: 64 });
+                return;
+            }
+            reminders.removeReminder(id);
             await interaction.reply({ content: 'Reminder cancelled.', flags: 64 });
         } else if (action === 'edit' && id && value) {
             let all = reminders.loadReminders();

@@ -24,7 +24,7 @@ function addReminder(reminder) {
 
 function removeReminder(id) {
     let reminders = loadReminders();
-    reminders = reminders.filter(r => r.id !== id);
+    reminders = reminders.filter(r => r.reminder_id !== id && r.id !== id);
     saveReminders(reminders);
 }
 
@@ -43,7 +43,16 @@ function getUserReminders(userId) {
 
 function getDueReminders() {
     const now = Date.now();
-    return loadReminders().filter(r => r.time <= now);
+    return loadReminders().filter(r => {
+        if (r.time !== undefined) {
+            return r.time <= now;
+        }
+        if (r.time_to_send !== undefined) {
+            const ts = Date.parse(r.time_to_send);
+            return ts <= now;
+        }
+        return false;
+    });
 }
 
 function getReminderById(id) {

@@ -30,6 +30,7 @@ class BarryBot {
         this.inactivity = new InactivityHandler();
 
         this.setupEventListeners();
+    this.startReminderLoop();
     }
 
     setupEventListeners() {
@@ -149,28 +150,95 @@ class BarryBot {
     startReminderLoop() {
         setInterval(async () => {
             const due = Reminders.getDueReminders();
+            if (due.length === 0) return;
+            const modChannel = this.client.channels.cache.find(ch => ch.name === 'barry-mods' && ch.type === 0);
             for (const reminder of due) {
+                let dmStatus = '', channelStatus = '', errorStatus = '';
+                // Prepare pretty embed for reminder
+                const reminderColors = [0x2ecc71, 0xf1c40f, 0x9b59b6, 0x1abc9c, 0xe67e22, 0x3498db];
+                const reminderEmojis = ['⏰', '🦄', '🌈', '✨', '🎉', '🍀', '💡', '📅'];
+                const color = reminderColors[Math.floor(Math.random() * reminderColors.length)];
+                const emoji = reminderEmojis[Math.floor(Math.random() * reminderEmojis.length)];
+                const embed = {
+                    color,
+                    title: `${emoji} Reminder`,
+                    description: `**${reminder.message}**`,
+                    fields: [
+                        { name: 'User', value: `<@${reminder.userId}>`, inline: true },
+                        { name: 'Channel', value: `<#${reminder.channelId}>`, inline: true },
+                        { name: 'Time', value: `<t:${Math.floor(reminder.time/1000)}:F>`, inline: true },
+                        { name: 'Privacy', value: reminder.privacy || 'public', inline: true },
+                        { name: 'Raw Channel ID', value: `${reminder.channelId}` },
+                        { name: 'Raw User ID', value: `${reminder.userId}` }
+                    ],
+                    footer: { text: `Reminder ID: ${reminder.id} • Barry Bot` },
+                    timestamp: new Date()
+                };
+                // Send DM (always)
                 try {
                     const user = await this.client.users.fetch(reminder.userId);
                     if (user) {
-                        await user.send(`⏰ Reminder: ${reminder.message}`);
+                        await user.send({ embeds: [embed] });
+                        dmStatus = '✅ DM sent';
                     } else {
-                        // fallback to channel
+                        dmStatus = '❌ DM failed (user not found)';
+                        errorStatus += `DM error: user not found.`;
+                    }
+                } catch (err) {
+                    dmStatus = '❌ DM failed';
+                    errorStatus += `DM error: ${err.message || err}`;
+                }
+                // If public, send in channel
+                if ((reminder.privacy || 'public') === 'public') {
+                    try {
                         const channel = this.client.channels.cache.get(reminder.channelId);
                         if (channel) {
-                            await channel.send(`⏰ Reminder for <@${reminder.userId}>: ${reminder.message}`);
+                            await channel.send({ content: `<@${reminder.userId}>`, embeds: [embed] });
+                            channelStatus = '✅ Channel sent';
+                        } else {
+                            channelStatus = '❌ Channel failed (channel not found)';
+                            errorStatus += ` Channel error: channel not found.`;
                         }
+                    } catch (err) {
+                        channelStatus = '❌ Channel failed';
+                        errorStatus += ` Channel error: ${err.message || err}`;
                     }
-                } catch {}
+                } else {
+                    channelStatus = 'Private reminder, not sent to channel.';
+                }
+                // Log to #barry-mods as embed
+                if (modChannel) {
+                    const logColors = [0x3498db, 0xe67e22, 0x9b59b6, 0x1abc9c];
+                    const logEmojis = ['📋', '🔔', '📝', '📢', '🎯'];
+                    const logColor = logColors[Math.floor(Math.random() * logColors.length)];
+                    const logEmoji = logEmojis[Math.floor(Math.random() * logEmojis.length)];
+                    const logEmbed = {
+                        color: logColor,
+                        title: `${logEmoji} Reminder Delivery Log`,
+                        description: `Reminder for <@${reminder.userId}>`,
+                        fields: [
+                            { name: 'Message', value: `**${reminder.message}**` },
+                            { name: 'DM Status', value: dmStatus, inline: true },
+                            { name: 'Channel Status', value: channelStatus, inline: true },
+                            ...(errorStatus ? [{ name: 'Errors', value: errorStatus }] : []),
+                            { name: 'Privacy', value: reminder.privacy || 'public', inline: true },
+                            { name: 'Raw Channel ID', value: `${reminder.channelId}` },
+                            { name: 'Raw User ID', value: `${reminder.userId}` }
+                        ],
+                        footer: { text: `Reminder ID: ${reminder.id} • Barry Bot` },
+                        timestamp: new Date()
+                    };
+                    await modChannel.send({ embeds: [logEmbed] });
+                }
+                // Repeat or remove
                 if (reminder.repeat) {
-                    // Reschedule for next repeat
-                    reminder.time = Date.now() + reminder.repeat;
+                    reminder.time_to_send = new Date(Date.now() + reminder.repeat).toISOString();
                     Reminders.updateReminder(reminder);
                 } else {
                     Reminders.removeReminder(reminder.id);
                 }
             }
-        }, 10 * 1000); // Check every 10 seconds
+    }, 10 * 1000); // Check every 10 second
     }
 
     async start() {
