@@ -109,8 +109,6 @@ Barry will reply in character, keep things fun, and help manage your community!
 
 | Command                                   | Description                    |
 |--------------------------------------------|--------------------------------|
-
-
 | `/askbarry [question]`                    | Ask Barry anything             |
 | `/report [user]`                          | View a user's moderation history (mods only) |
 | `/note [user] [note]`                     | Add a private note about a user (mods only) |
@@ -133,7 +131,8 @@ Barry Bot uses several JSON files for data storage and configuration. Make sure 
 - `barry-personality.json` — Personality traits and dialogue
 - `database.json` — User stats and moderation logs
 - `inactive-users.json` — Inactivity tracking
-- `log.json` — Moderation and activity logs
+- `reminder.json` — Stores user reminders and scheduling data
+
 
 You can create these files manually or copy them from a template if provided. They are ignored by git for privacy and security.
 
