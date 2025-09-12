@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('disc
 const DatabaseHandler = require('./database');
 const fs = require('fs');
 const path = require('path');
+const reminders = require('./reminders');
 
 class CommandHandler {
     constructor() {
@@ -97,6 +98,42 @@ class CommandHandler {
                         .setDescription('Reason for the alert')
                         .setRequired(true)
                 ),
+            new SlashCommandBuilder()
+                .setName('remindme')
+                .setDescription('Set a reminder')
+                .addStringOption(option =>
+                    option.setName('time')
+                        .setDescription('Time interval (e.g., 10m, 2h, 1d)')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('message')
+                        .setDescription('Reminder message')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('repeat')
+                        .setDescription('Repeat interval (e.g., every day, every 8h)')
+                        .setRequired(false)
+                ),
+            new SlashCommandBuilder()
+                .setName('reminders')
+                .setDescription('List, edit, or cancel your reminders')
+                .addStringOption(option =>
+                    option.setName('action')
+                        .setDescription('Action: list, cancel, edit, snooze')
+                        .setRequired(false)
+                )
+                .addStringOption(option =>
+                    option.setName('id')
+                        .setDescription('Reminder ID (for cancel/edit/snooze)')
+                        .setRequired(false)
+                )
+                .addStringOption(option =>
+                    option.setName('value')
+                        .setDescription('New time/message for edit/snooze')
+                        .setRequired(false)
+                ),
         ];
     }
 
@@ -141,6 +178,12 @@ class CommandHandler {
                     break;
                 case 'alert':
                     await this.handleAlert(interaction);
+                    break;
+                case 'remindme':
+                    await this.handleRemindMe(interaction);
+                    break;
+                case 'reminders':
+                    await this.handleReminders(interaction);
                     break;
                 default:
                     await interaction.reply({ content: 'Unknown command!', ephemeral: true });
@@ -415,6 +458,131 @@ class CommandHandler {
             });
         }
         await interaction.reply({ content: 'Alert sent to all mods.', flags: 64 });
+    }
+
+    async handleRemindMe(interaction) {
+        const timeStr = interaction.options.getString('time');
+        const message = interaction.options.getString('message');
+        const repeatStr = interaction.options.getString('repeat');
+        const userId = interaction.user.id;
+        const channelId = interaction.channelId;
+        const now = Date.now();
+        const ms = this.parseTime(timeStr);
+        if (!ms || ms < 1000) {
+            await interaction.reply({ content: 'Invalid time format. Use formats like 10m, 2h, 1d.', flags: 64 });
+            return;
+        }
+        let repeatMs = null;
+        if (repeatStr) {
+            repeatMs = this.parseRepeat(repeatStr);
+            if (!repeatMs) {
+                await interaction.reply({ content: 'Invalid repeat format. Use formats like every day, every 8h.', flags: 64 });
+                return;
+            }
+        }
+        const remindAt = now + ms;
+        const reminder = {
+            id: now + Math.random(),
+            userId,
+            channelId,
+            time: remindAt,
+            message,
+            repeat: repeatMs
+        };
+        reminders.addReminder(reminder);
+        await interaction.reply({ content: `⏰ Reminder set for ${timeStr}${repeatMs ? `, repeating every ${repeatStr}` : ''}: ${message}`, flags: 64 });
+    }
+
+    async handleReminders(interaction) {
+        const userId = interaction.user.id;
+        const action = interaction.options.getString('action') || 'list';
+        const id = interaction.options.getString('id');
+        const value = interaction.options.getString('value');
+        if (action === 'list') {
+            const userReminders = reminders.getUserReminders(userId);
+            if (!userReminders.length) {
+                await interaction.reply({ content: 'You have no active reminders.', flags: 64 });
+                return;
+            }
+            const lines = userReminders.map(r => `• ID: ${r.id}\n<t:${Math.floor(r.time/1000)}:R> — ${r.message}${r.repeat ? ' (repeats)' : ''}`);
+            await interaction.reply({ content: `Your reminders:\n${lines.join('\n')}`, flags: 64 });
+        } else if (action === 'cancel' && id) {
+            reminders.removeReminder(Number(id));
+            await interaction.reply({ content: 'Reminder cancelled.', flags: 64 });
+        } else if (action === 'edit' && id && value) {
+            let all = reminders.loadReminders();
+            let r = all.find(r => r.id == id && r.userId === userId);
+            if (!r) {
+                await interaction.reply({ content: 'Reminder not found.', flags: 64 });
+                return;
+            }
+            r.message = value;
+            reminders.saveReminders(all);
+            await interaction.reply({ content: 'Reminder updated.', flags: 64 });
+        } else if (action === 'snooze' && id && value) {
+            let all = reminders.loadReminders();
+            let r = all.find(r => r.id == id && r.userId === userId);
+            if (!r) {
+                await interaction.reply({ content: 'Reminder not found.', flags: 64 });
+                return;
+            }
+            const ms = this.parseTime(value);
+            if (!ms) {
+                await interaction.reply({ content: 'Invalid snooze time.', flags: 64 });
+                return;
+            }
+            r.time = Date.now() + ms;
+            reminders.saveReminders(all);
+            await interaction.reply({ content: 'Reminder snoozed.', flags: 64 });
+        } else {
+            await interaction.reply({ content: 'Invalid action or missing parameters.', flags: 64 });
+        }
+    }
+
+    parseRepeat(str) {
+        // Accepts formats like 'every day', 'every 8h', 'every 30m'
+        const match = str.match(/^every\s+(\d+)?\s*([smhd]|day)$/i);
+        if (!match) return null;
+        let value = match[1] ? parseInt(match[1]) : 1;
+        let unit = match[2].toLowerCase();
+        if (unit === 'day') unit = 'd';
+        switch(unit) {
+            case 's': return value * 1000;
+            case 'm': return value * 60 * 1000;
+            case 'h': return value * 60 * 60 * 1000;
+            case 'd': return value * 24 * 60 * 60 * 1000;
+            default: return null;
+        }
+    }
+
+    parseTime(str) {
+        // Supports formats like 10m, 2h, 1d
+        const match = str.match(/^(\d+)([smhd])$/i);
+        if (!match) return null;
+        const value = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+        switch(unit) {
+            case 's': return value * 1000;
+            case 'm': return value * 60 * 1000;
+            case 'h': return value * 60 * 60 * 1000;
+            case 'd': return value * 24 * 60 * 60 * 1000;
+            default: return null;
+        }
+    }
+
+    formatDuration(ms) {
+        const seconds = Math.floor((ms / 1000) % 60);
+        const minutes = Math.floor((ms / (1000 * 60)) % 60);
+        const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+        const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+
+        let duration = '';
+        if (days > 0) duration += `${days}d `;
+        if (hours > 0) duration += `${hours}h `;
+        if (minutes > 0) duration += `${minutes}m `;
+        if (seconds > 0) duration += `${seconds}s`;
+
+        return duration.trim();
     }
 }
 

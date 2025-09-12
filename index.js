@@ -9,6 +9,7 @@ const ModerationHandler = require('./src/moderation');
 const DatabaseHandler = require('./src/database');
 const CommandHandler = require('./src/commands');
 const InactivityHandler = require('./src/inactivity');
+const Reminders = require('./src/reminders');
 
 class BarryBot {
     constructor() {
@@ -143,6 +144,33 @@ class BarryBot {
                 });
             }
         }, 24 * 60 * 60 * 1000);
+    }
+
+    startReminderLoop() {
+        setInterval(async () => {
+            const due = Reminders.getDueReminders();
+            for (const reminder of due) {
+                try {
+                    const user = await this.client.users.fetch(reminder.userId);
+                    if (user) {
+                        await user.send(`⏰ Reminder: ${reminder.message}`);
+                    } else {
+                        // fallback to channel
+                        const channel = this.client.channels.cache.get(reminder.channelId);
+                        if (channel) {
+                            await channel.send(`⏰ Reminder for <@${reminder.userId}>: ${reminder.message}`);
+                        }
+                    }
+                } catch {}
+                if (reminder.repeat) {
+                    // Reschedule for next repeat
+                    reminder.time = Date.now() + reminder.repeat;
+                    Reminders.updateReminder(reminder);
+                } else {
+                    Reminders.removeReminder(reminder.id);
+                }
+            }
+        }, 10 * 1000); // Check every 10 seconds
     }
 
     async start() {
