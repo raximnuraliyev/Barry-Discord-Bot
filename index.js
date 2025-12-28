@@ -1,14 +1,12 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+// Removed fs and path; all persistent data is now in MongoDB
 
 // Import modules
 const PersonalityHandler = require('./src/ai-personality');
 const ModerationHandler = require('./src/moderation');
 const DatabaseHandler = require('./src/database');
 const CommandHandler = require('./src/commands');
-const InactivityHandler = require('./src/inactivity');
 const Reminders = require('./src/reminders');
 
 class BarryBot {
@@ -27,10 +25,9 @@ class BarryBot {
         this.moderation = new ModerationHandler();
         this.database = new DatabaseHandler();
         this.commands = new CommandHandler();
-        this.inactivity = new InactivityHandler();
 
         this.setupEventListeners();
-    this.startReminderLoop();
+        this.startReminderLoop();
     }
 
     setupEventListeners() {
@@ -38,7 +35,7 @@ class BarryBot {
             console.log(`Barry is online! Logged in as ${this.client.user.tag}`);
             this.client.user.setActivity('Managing the server like a boss', { type: 'WATCHING' });
             this.registerCommands();
-            this.startInactivityChecks();
+            // Inactivity checks removed
         });
 
         this.client.on('messageCreate', async (message) => {
@@ -50,30 +47,50 @@ class BarryBot {
             // Check for moderation violations
             await this.moderation.checkMessage(message);
 
-            // Only reply if Barry is mentioned or 'barry' is in the message
-            const barryRegex = /b+a+r+y+/i;
+            // Respond if Barry is mentioned, tagged, or called by any variant/misspelling
+            const barryVariants = [
+                /b+a+r+y+/i,   // barry, bary, baary, etc.
+                /b+e+r+r+y+/i, // berry, bery, beerry, etc.
+                /b+a+r+i+e+/i, // barie, bari, bariee, etc.
+                /b+a+r+i+/i,   // bari, barri, etc.
+                /b+a+r+e+y+/i, // barey, etc.
+                /b+a+r+e+i+/i, // barei, etc.
+                /b+a+r+i+y+/i, // bariy, etc.
+                /b+a+r+y+e+/i, // barye, etc.
+            ];
             const isDirectMention = message.mentions.has(this.client.user);
-            const isBarryText = barryRegex.test(message.content);
+            const isBarryText = barryVariants.some(rgx => rgx.test(message.content));
             if (isDirectMention || isBarryText) {
                 // Remove the mention from the message content if present
                 let cleanedContent = message.content;
                 if (isDirectMention) {
                     cleanedContent = cleanedContent.replace(new RegExp(`<@!?${this.client.user.id}>`, 'g'), '').trim();
                 }
-                // Prepare context for AI
-                const aiPrompt = {
-                    user: cleanedContent,
-                    personality: this.personality.personalityData.description
-                };
-                // Generate AI response
-                let response = await this.personality.generateAIResponse({
-                    content: cleanedContent,
-                    noActions: true
-                });
+                // Gather recent context (last 8 messages in channel)
+                const channelMessages = await message.channel.messages.fetch({ limit: 10 });
+                const context = Array.from(channelMessages.values())
+                    .filter(m => m.id !== message.id)
+                    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+                    .map(m => ({ author: m.author.username, content: m.content }));
+                // Get user profile and mod status
+                const userProfile = await this.database.getUserData(message.author.id, message.guild.id);
+                const isMod = message.member?.permissions?.has('ModerateMembers') || false;
+                // Channel type (simple)
+                const channelType = message.channel.name?.includes('mod') ? 'mods' : 'general';
+                // Time of day
+                const hour = new Date().getHours();
+                const timeOfDay = hour >= 22 || hour < 6 ? 'latenight' : 'day';
+                // No delay: respond as soon as possible
+                let response = await this.personality.generateResponse(
+                    { author: message.author, content: cleanedContent },
+                    context,
+                    channelType,
+                    userProfile,
+                    isMod,
+                    timeOfDay
+                );
                 if (response) {
-                    // Remove any action-style text (e.g., *chuckles*, *winks*, etc.)
                     response = response.replace(/\*[^*]+\*/g, '').replace(/_([^_]+)_/g, '$1').trim();
-                    // Send as an embed with Barry's username and avatar
                     message.channel.send({
                         embeds: [{
                             description: response,
@@ -84,19 +101,7 @@ class BarryBot {
                             }
                         }]
                     });
-                    // Log the interaction
-                    const logPath = path.join(__dirname, 'log.json');
-                    let logs = [];
-                    try {
-                        logs = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-                    } catch {}
-                    logs.push({
-                        timestamp: new Date().toISOString(),
-                        user: message.author.tag,
-                        userMessage: cleanedContent,
-                        barryReply: response
-                    });
-                    fs.writeFileSync(logPath, JSON.stringify(logs, null, 2));
+                    // Optionally: log interaction to MongoDB
                 }
             }
         });
@@ -118,39 +123,12 @@ class BarryBot {
         await this.commands.registerCommands(this.client);
     }
 
-    startInactivityChecks() {
-        // Check for inactive users every 6 hours
-        setInterval(() => {
-            this.inactivity.checkInactiveUsers(this.client);
-        }, 6 * 60 * 60 * 1000);
-
-        // Generate and send inactive user report every 24 hours
-        setInterval(async () => {
-            const inactiveList = await this.inactivity.getInactiveUsersList(this.client);
-            const staffRoleId = process.env.BARRY_STAFF_ROLE_ID || null; // Set this in your .env
-            const modChannel = this.client.channels.cache.find(
-                ch => ch.name === 'barry-mods' && ch.type === 0 // 0 = GUILD_TEXT
-            );
-            if (modChannel && inactiveList && inactiveList.length > 0) {j
-                // Save to inactive-users.json
-                const inactivePath = path.join(__dirname, 'inactive-users.json');
-                fs.writeFileSync(inactivePath, JSON.stringify(inactiveList, null, 2));
-                // Build mention string for staff
-                const staffMention = staffRoleId ? `<@&${staffRoleId}>` : '@here';
-                // Build user list
-                const userList = inactiveList.map(u => `<@${u.userId}>`).join(', ');
-                // Send report
-                modChannel.send({
-                    content: `${staffMention} Inactive users in the last 24h: ${userList}`
-                });
-            }
-        }, 24 * 60 * 60 * 1000);
-    }
+    // Inactivity checks and reports removed
 
     startReminderLoop() {
         setInterval(async () => {
-            const due = Reminders.getDueReminders();
-            if (due.length === 0) return;
+            const due = await Reminders.getDueReminders();
+            if (!Array.isArray(due) || due.length === 0) return;
             const modChannel = this.client.channels.cache.find(ch => ch.name === 'barry-mods' && ch.type === 0);
             for (const reminder of due) {
                 let dmStatus = '', channelStatus = '', errorStatus = '';

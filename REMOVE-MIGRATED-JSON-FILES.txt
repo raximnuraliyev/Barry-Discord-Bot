@@ -1,0 +1,9 @@
+Barry Bot has fully migrated to MongoDB. The following JSON files are now deprecated and should be deleted:
+- database.json
+- reminders.json
+- barry-ask-responses.json
+- barry-personality.json
+- inactive-users.json
+- log.json
+
+No persistent data is stored in these files. All data is now in MongoDB.

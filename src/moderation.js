@@ -615,9 +615,13 @@ class ModerationHandler {
     // Check for spam (repeated messages)
     await this.checkSpam(message);
 
-    // Check for invite links
+    // Check for invite links, but allow owner and moderators to post them
     if (this.containsInviteLinks(content)) {
-      await this.handleInviteLink(message);
+      const isOwner = message.guild && message.author.id === message.guild.ownerId;
+      const isMod = message.member && message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers);
+      if (!(isOwner || isMod)) {
+        await this.handleInviteLink(message);
+      }
     }
   }
 
@@ -798,7 +802,7 @@ class ModerationHandler {
     const content = message.content;
 
     // Simple spam detection - same message repeated
-    const userData = this.database.getUserData(userId, message.guild.id);
+    const userData = await this.database.getUserData(userId, message.guild.id);
     if (userData.lastMessage === content && userData.lastMessageTime) {
       const timeDiff = Date.now() - userData.lastMessageTime;
       if (timeDiff < 5000) {
@@ -809,7 +813,7 @@ class ModerationHandler {
     }
 
     // Update last message
-    this.database.updateUserData(userId, message.guild.id, {
+    await this.database.updateUserData(userId, message.guild.id, {
       lastMessage: content,
       lastMessageTime: Date.now(),
     });
@@ -817,15 +821,43 @@ class ModerationHandler {
 
   async handleSpam(message) {
     await message.delete();
-    await this.warnUser(message, "Spam detected");
+    const userId = message.author.id;
+    const guildId = message.guild.id;
+    let userData = await this.database.getUserData(userId, guildId);
+    const spamStrikes = userData.spamStrikes || 0;
 
-    this.database.logAction({
-      userId: message.author.id,
-      guildId: message.guild.id,
-      action: "warn",
+    let action = "warn";
+    let duration = null;
+
+    if (spamStrikes === 0) {
+      action = "warn";
+      await this.warnUser(message, "Spam detected. This is your first warning.");
+    } else if (spamStrikes === 1) {
+      action = "timeout";
+      duration = 1 * 60 * 1000;
+      await this.timeoutUser(message, duration, "Second time spamming. You are timed out for 1 minute.");
+    } else if (spamStrikes === 2) {
+      action = "timeout";
+      duration = 5 * 60 * 1000;
+      await this.timeoutUser(message, duration, "Third time spamming. You are timed out for 5 minutes.");
+    } else {
+      action = "ban";
+      await this.banUser(message, "Repeated spamming. You are banned.");
+    }
+
+    await this.database.logAction({
+      userId: userId,
+      guildId: guildId,
+      action: action,
       reason: "Spam detected",
       moderator: "Barry (Auto)",
       timestamp: new Date().toISOString(),
+      duration: duration
+    });
+
+    // Update spamStrikes
+    await this.database.updateUserData(userId, guildId, {
+      spamStrikes: spamStrikes + 1
     });
   }
 

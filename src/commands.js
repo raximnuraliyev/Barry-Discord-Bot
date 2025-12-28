@@ -1,7 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const DatabaseHandler = require('./database');
-const fs = require('fs');
-const path = require('path');
 const reminders = require('./reminders');
 
 class CommandHandler {
@@ -46,9 +44,6 @@ class CommandHandler {
                 .setDescription('View server statistics')
                 .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
             
-            new SlashCommandBuilder()
-                .setName('optoutcheckins')
-                .setDescription('Opt out of inactivity check-ins'),
             
             new SlashCommandBuilder()
                 .setName('warn')
@@ -85,10 +80,6 @@ class CommandHandler {
                 )
                 .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
             
-            new SlashCommandBuilder()
-                .setName('inactiveusers')
-                .setDescription('Show the list of currently inactive users (mods only)')
-                .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
             
             new SlashCommandBuilder()
                 .setName('alert')
@@ -201,57 +192,61 @@ class CommandHandler {
 
     async handleAskBarry(interaction) {
         const question = interaction.options.getString('question');
-        const fs = require('fs');
-        const path = require('path');
-        const { EmbedBuilder } = require('discord.js');
-
-        // Load Barry's personality prompt
-        const personalityPath = path.join(__dirname, '../barry-personality.json');
-        let personality;
+        // Use the same AI logic as normal Barry replies for consistency
+        const PersonalityHandler = require('./ai-personality');
+        const personality = new PersonalityHandler();
+        // Simulate a message object for context
+        const fakeMessage = {
+            author: interaction.user,
+            content: question
+        };
+        // Gather recent context (last 8 messages in the channel, if possible)
+        let context = [];
         try {
-            personality = JSON.parse(fs.readFileSync(personalityPath, 'utf8'));
-        } catch (e) {
-            personality = { description: "Barry is a dry, witty, sarcastic, and sometimes caring Canadian Discord bot." };
-        }
-
-        // Prepare prompt for AI
-        const prompt = `You are Barry, a Discord bot.\nPersonality: ${personality.description}\nTraits: ${personality.personality ? personality.personality.join(', ') : ''}\nCatchphrases: ${personality.catchphrases ? personality.catchphrases.join(' ') : ''}\n\nUser: ${question}\nBarry:`;
-
-        // Call OpenRouter API
-        const axios = require('axios');
-        let aiReply = personality.catchphrases ? personality.catchphrases[0] : "Boom.";
+            if (interaction.channel && interaction.channel.messages) {
+                const channelMessages = await interaction.channel.messages.fetch({ limit: 10 });
+                context = Array.from(channelMessages.values())
+                    .filter(m => m.id !== interaction.id)
+                    .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+                    .map(m => ({ author: m.author.username, content: m.content }));
+            }
+        } catch {}
+        // Get user profile and mod status
+        let userProfile = {};
+        let isMod = false;
+        let channelType = 'general';
+        let timeOfDay = 'day';
         try {
-            const response = await axios.post(
-                'https://openrouter.ai/api/v1/chat/completions',
-                {
-                    model: 'gpt-4o', // Change if you want a different model from OpenRouter
-                    messages: [
-                        { role: 'system', content: prompt },
-                        { role: 'user', content: question }
-                    ],
-                    max_tokens: 100,
-                    temperature: 0.7
-                },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
+            userProfile = await this.database.getUserData(interaction.user.id, interaction.guild.id);
+            isMod = interaction.member?.permissions?.has('ModerateMembers') || false;
+            channelType = interaction.channel?.name?.includes('mod') ? 'mods' : 'general';
+            const hour = new Date().getHours();
+            timeOfDay = hour >= 22 || hour < 6 ? 'latenight' : 'day';
+        } catch {}
+        // Use the same maturity logic as normal replies
+        const maturity = 2;
+        let aiReply = "Sorry, I can't answer that right now. Try again later.";
+        try {
+            aiReply = await personality.generateResponse(
+                fakeMessage,
+                context,
+                channelType,
+                userProfile,
+                isMod,
+                timeOfDay,
+                maturity
             );
-            aiReply = response.data.choices[0].message.content.trim();
+            if (!aiReply) aiReply = "Sorry, I can't answer that right now. Try again later.";
         } catch (err) {
             console.error('OpenRouter API error:', err?.response?.data || err.message || err);
             aiReply = "Sorry, I can't answer that right now. Try again later.";
         }
-
         // Build embed (no emojis)
         const embed = new EmbedBuilder()
             .setColor(0x2d3136)
             .setTitle('Barry says:')
             .setDescription(aiReply)
             .setFooter({ text: 'Ask Barry anything. He might answer.' });
-
         await interaction.reply({ embeds: [embed] });
     }
 
@@ -307,26 +302,27 @@ class CommandHandler {
     }
 
     async handleServerStats(interaction) {
-        const stats = this.database.getServerStats(interaction.guild.id);
+        const stats = await this.database.getServerStats(interaction.guild.id);
         const guild = interaction.guild;
-        
+        // Fallbacks for undefined/null stats
+        const safe = (v) => (typeof v === 'number' && !isNaN(v) ? v.toString() : '0');
         const embed = new EmbedBuilder()
             .setColor(0x0099FF)
             .setTitle(`📊 Server Statistics for ${guild.name}`)
             .setThumbnail(guild.iconURL())
             .addFields(
-                { name: 'Total Members', value: guild.memberCount.toString(), inline: true },
-                { name: 'Online Members', value: guild.members.cache.filter(m => m.presence?.status !== 'offline').size.toString(), inline: true },
-                { name: 'Tracked Users', value: stats.totalUsers.toString(), inline: true },
-                { name: 'Actions Today', value: stats.actionsToday.toString(), inline: true },
-                { name: 'Actions This Week', value: stats.actionsThisWeek.toString(), inline: true },
-                { name: 'Bans This Week', value: stats.bansThisWeek.toString(), inline: true },
-                { name: 'Timeouts This Week', value: stats.mutesThisWeek.toString(), inline: true },
-                { name: 'Warnings This Week', value: stats.warningsThisWeek.toString(), inline: true }
+                { name: 'Total Members', value: safe(guild.memberCount), inline: true },
+                { name: 'Online Members', value: safe(guild.members?.cache?.filter(m => m.presence?.status !== 'offline').size), inline: true },
+                { name: 'Tracked Users', value: safe(stats?.totalUsers), inline: true },
+                { name: 'Actions Today', value: safe(stats?.actionsToday), inline: true },
+                { name: 'Actions This Week', value: safe(stats?.actionsThisWeek), inline: true },
+                { name: 'Bans This Week', value: safe(stats?.bansThisWeek), inline: true },
+                { name: 'Timeouts This Week', value: safe(stats?.mutesThisWeek), inline: true },
+                { name: 'Warnings This Week', value: safe(stats?.warningsThisWeek), inline: true }
             )
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: 64 });
     }
 
     async handleOptOutCheckins(interaction) {
@@ -351,12 +347,14 @@ class CommandHandler {
             return;
         }
 
-        // Update user strikes
-        const userData = this.database.getUserData(user.id, interaction.guild.id);
-        this.database.updateUserStrikes(user.id, interaction.guild.id, userData.strikes + 1);
+        // Update user strikes, ensure valid number
+        let userData = await this.database.getUserData(user.id, interaction.guild.id);
+        let strikes = (typeof userData.strikes === 'number' && !isNaN(userData.strikes)) ? userData.strikes : 0;
+        strikes++;
+        await this.database.updateUserStrikes(user.id, interaction.guild.id, strikes);
 
         // Log the action
-        this.database.logAction({
+        await this.database.logAction({
             userId: user.id,
             guildId: interaction.guild.id,
             action: 'warn',
@@ -369,7 +367,7 @@ class CommandHandler {
             .setColor(0xFFFF00)
             .setTitle('⚠️ User Warned')
             .setDescription(`${user.tag} has been warned.\nReason: ${reason}`)
-            .addFields({ name: 'Strikes', value: (userData.strikes + 1).toString(), inline: true })
+            .addFields({ name: 'Strikes', value: strikes.toString(), inline: true })
             .setTimestamp();
 
         await interaction.reply({ embeds: [embed] });
@@ -388,9 +386,15 @@ class CommandHandler {
 
         try {
             await member.timeout(duration * 60 * 1000, reason);
-            
+
+            // Update user strikes, ensure valid number
+            let userData = await this.database.getUserData(user.id, interaction.guild.id);
+            let strikes = (typeof userData.strikes === 'number' && !isNaN(userData.strikes)) ? userData.strikes : 0;
+            strikes++;
+            await this.database.updateUserStrikes(user.id, interaction.guild.id, strikes);
+
             // Log the action
-            this.database.logAction({
+            await this.database.logAction({
                 userId: user.id,
                 guildId: interaction.guild.id,
                 action: 'timeout',
@@ -404,6 +408,7 @@ class CommandHandler {
                 .setColor(0xFF8C00)
                 .setTitle('🔇 User Timed Out')
                 .setDescription(`${user.tag} has been timed out for ${duration} minutes.\nReason: ${reason}`)
+                .addFields({ name: 'Strikes', value: strikes.toString(), inline: true })
                 .setTimestamp();
 
             await interaction.reply({ embeds: [embed] });
@@ -414,14 +419,9 @@ class CommandHandler {
     }
 
     async handleInactiveUsers(interaction) {
-        const staffRoleId = process.env.BARRY_STAFF_ROLE_ID || null;
-        const inactivePath = path.join(__dirname, '../inactive-users.json');
-        let inactiveList = [];
-        try {
-            inactiveList = JSON.parse(fs.readFileSync(inactivePath, 'utf8'));
-        } catch {
-            inactiveList = [];
-        }
+        // Use MongoDB to get inactive users
+        const daysInactive = 1;
+        const inactiveList = await this.database.getInactiveUsers(interaction.guild.id, daysInactive);
         if (!inactiveList.length) {
             await interaction.reply({ content: 'There are no inactive users in the last 24h.', flags: 64 });
             return;
@@ -511,7 +511,7 @@ class CommandHandler {
             time: remindAt,
             repeat: repeatMs
         };
-        reminders.addReminder(reminder);
+        await reminders.addReminder(reminder);
         const colors = [0x2ecc71, 0xf1c40f, 0x9b59b6, 0x1abc9c, 0xe67e22, 0x3498db];
         const emojis = ['⏰', '🦄', '🌈', '✨', '🎉', '🍀', '💡', '📅'];
         const color = colors[Math.floor(Math.random() * colors.length)];
@@ -543,10 +543,10 @@ class CommandHandler {
         let viewUserId = userId;
         if (targetUser) viewUserId = targetUser.id;
         if (action === 'list') {
-            let allReminders = reminders.loadReminders();
+            let allReminders = await reminders.loadReminders();
             let visibleReminders;
             if (viewUserId === userId || isMod) {
-                visibleReminders = allReminders.filter(r => r.user_id === viewUserId);
+                visibleReminders = allReminders.filter(r => r.userId === viewUserId);
             } else {
                 await interaction.reply({ content: 'You do not have permission to view these reminders.', flags: 64 });
                 return;
@@ -565,8 +565,8 @@ class CommandHandler {
                 .setDescription('Active reminders:')
                 .addFields(
                     ...visibleReminders.map((r, i) => ({
-                        name: `${i+1}. [${r.type.toUpperCase()}] <t:${Math.floor(new Date(r.time_to_send).getTime()/1000)}:F>`,
-                        value: `**${r.message}**\nID: ${r.reminder_id}`,
+                        name: `${i+1}. [${r.privacy ? r.privacy.toUpperCase() : 'REMINDER'}] <t:${Math.floor((r.time || Date.now())/1000)}:F>`,
+                        value: `**${r.message}**\nID: ${r.id}`,
                         inline: false
                     }))
                 )
@@ -574,28 +574,25 @@ class CommandHandler {
                 .setTimestamp();
             await interaction.reply({ embeds: [embed], flags: 64 });
         } else if (action === 'cancel' && id) {
-            let allReminders = reminders.loadReminders();
-            let r = allReminders.find(r => r.reminder_id == id && (r.user_id === userId || isMod));
-            if (!r) {
+            let r = await reminders.getReminderById(id);
+            if (!r || (r.userId !== userId && !isMod)) {
                 await interaction.reply({ content: 'Reminder not found or permission denied.', flags: 64 });
                 return;
             }
-            reminders.removeReminder(id);
+            await reminders.removeReminder(id);
             await interaction.reply({ content: 'Reminder cancelled.', flags: 64 });
         } else if (action === 'edit' && id && value) {
-            let all = reminders.loadReminders();
-            let r = all.find(r => r.id == id && r.userId === userId);
-            if (!r) {
+            let r = await reminders.getReminderById(id);
+            if (!r || r.userId !== userId) {
                 await interaction.reply({ content: 'Reminder not found.', flags: 64 });
                 return;
             }
             r.message = value;
-            reminders.saveReminders(all);
+            await reminders.updateReminder(r);
             await interaction.reply({ content: 'Reminder updated.', flags: 64 });
         } else if (action === 'snooze' && id && value) {
-            let all = reminders.loadReminders();
-            let r = all.find(r => r.id == id && r.userId === userId);
-            if (!r) {
+            let r = await reminders.getReminderById(id);
+            if (!r || r.userId !== userId) {
                 await interaction.reply({ content: 'Reminder not found.', flags: 64 });
                 return;
             }
@@ -605,7 +602,7 @@ class CommandHandler {
                 return;
             }
             r.time = Date.now() + ms;
-            reminders.saveReminders(all);
+            await reminders.updateReminder(r);
             await interaction.reply({ content: 'Reminder snoozed.', flags: 64 });
         } else {
             await interaction.reply({ content: 'Invalid action or missing parameters.', flags: 64 });

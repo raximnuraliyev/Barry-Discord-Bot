@@ -1,67 +1,47 @@
-const fs = require('fs');
-const path = require('path');
 
-const REMINDERS_FILE = path.join(__dirname, '..', 'reminders.json');
+const connectMongo = require('./mongo');
+const { Reminder } = require('./models');
+connectMongo();
 
-function loadReminders() {
-    if (!fs.existsSync(REMINDERS_FILE)) return [];
-    try {
-        return JSON.parse(fs.readFileSync(REMINDERS_FILE, 'utf8'));
-    } catch {
-        return [];
-    }
+async function loadReminders() {
+    return Reminder.find();
 }
 
-function saveReminders(reminders) {
-    fs.writeFileSync(REMINDERS_FILE, JSON.stringify(reminders, null, 2));
+async function addReminder(reminder) {
+    await Reminder.create(reminder);
 }
 
-function addReminder(reminder) {
-    const reminders = loadReminders();
-    reminders.push(reminder);
-    saveReminders(reminders);
+async function removeReminder(id) {
+    await Reminder.deleteOne({ $or: [{ id }, { reminder_id: id }] });
 }
 
-function removeReminder(id) {
-    let reminders = loadReminders();
-    reminders = reminders.filter(r => r.reminder_id !== id && r.id !== id);
-    saveReminders(reminders);
+async function updateReminder(reminder) {
+    await Reminder.updateOne(
+        { $or: [{ id: reminder.id }, { reminder_id: reminder.id }] },
+        { $set: reminder }
+    );
 }
 
-function updateReminder(reminder) {
-    let reminders = loadReminders();
-    const idx = reminders.findIndex(r => r.id === reminder.id || r.reminder_id === reminder.id);
-    if (idx !== -1) {
-        reminders[idx] = reminder;
-        saveReminders(reminders);
-    }
+async function getUserReminders(userId) {
+    return Reminder.find({ userId });
 }
 
-function getUserReminders(userId) {
-    return loadReminders().filter(r => r.userId === userId);
-}
-
-function getDueReminders() {
+async function getDueReminders() {
     const now = Date.now();
-    return loadReminders().filter(r => {
-        if (r.time !== undefined) {
-            return r.time <= now;
-        }
-        if (r.time_to_send !== undefined) {
-            const ts = Date.parse(r.time_to_send);
-            return ts <= now;
-        }
-        return false;
+    return Reminder.find({
+        $or: [
+            { time: { $lte: now } },
+            { time_to_send: { $exists: true, $lte: new Date(now).toISOString() } }
+        ]
     });
 }
 
-function getReminderById(id) {
-    return loadReminders().find(r => r.id == id || r.reminder_id == id);
+async function getReminderById(id) {
+    return Reminder.findOne({ $or: [{ id }, { reminder_id: id }] });
 }
 
 module.exports = {
     loadReminders,
-    saveReminders,
     addReminder,
     removeReminder,
     getUserReminders,
