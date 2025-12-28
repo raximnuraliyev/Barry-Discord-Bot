@@ -5,7 +5,7 @@ const { User, ModerationLog, Note, ServerState } = require('./models');
 
 class DatabaseHandler {
     constructor() {
-        connectMongo();
+        // Mongo connection is now handled in index.js before bot startup
     }
 
     async getUserData(userId, guildId) {

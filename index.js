@@ -2,12 +2,28 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 // Removed fs and path; all persistent data is now in MongoDB
 
+
 // Import modules
 const PersonalityHandler = require('./src/ai-personality');
 const ModerationHandler = require('./src/moderation');
 const DatabaseHandler = require('./src/database');
 const CommandHandler = require('./src/commands');
 const Reminders = require('./src/reminders');
+const connectMongo = require('./src/mongo');
+
+// Main startup sequence: connect to Mongo, then start Barry
+(async () => {
+    try {
+        await connectMongo();
+        console.log('Mongo ready');
+        // Initialize and start Barry
+        const barry = new BarryBot();
+        await barry.start();
+    } catch (err) {
+        console.error('Startup failed:', err);
+        process.exit(1);
+    }
+})();
 
 class BarryBot {
     constructor() {
@@ -228,8 +244,6 @@ class BarryBot {
     }
 }
 
-// Initialize and start Barry
-const barry = new BarryBot();
-barry.start();
+
 
 module.exports = BarryBot;

@@ -1,7 +1,5 @@
 
-const connectMongo = require('./mongo');
 const { Reminder } = require('./models');
-connectMongo();
 
 async function loadReminders() {
     return Reminder.find();
