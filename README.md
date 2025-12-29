@@ -112,18 +112,18 @@ Barry will reply in character, keep things fun, and help manage your community!
 
 ## Commands
 
-| Command                                   | Description                    |
-|--------------------------------------------|--------------------------------|
-| `/askbarry [question]`                    | Ask Barry anything             |
-| `/report [user]`                          | View a user's moderation history (mods only) |
-| `/note [user] [note]`                     | Add a private note about a user (mods only) |
-| `/serverstats`                            | View server statistics (mods only) |
-| `/optoutcheckins`                         | Opt out of inactivity check-ins |
-| `/warn [user] [reason]`                   | Warn a user (mods only)         |
-| `/timeout [user] [duration] [reason]`     | Timeout a user (mods only)      |
-| `/inactiveusers`                          | Show the list of currently inactive users (mods only) |
-| `/alert [reason]`                         | Notify all mods about rule-adjacent behavior |
-| `/remindme [time] [message] [repeat] [privacy]` | Set a reminder (with optional repeat and privacy) |
+| Command                                         | Description                                             |
+|-------------------------------------------------|---------------------------------------------------------|
+| `/askbarry [question]`                          | Ask Barry anything                                      |
+| `/report [user]`                                | View a user's moderation history (mods only)            |
+| `/note [user] [note]`                           | Add a private note about a user (mods only)             |
+| `/serverstats`                                  | View server statistics (mods only)                      |
+| `/optoutcheckins`                               | Opt out of inactivity check-ins                         |
+| `/warn [user] [reason]`                         | Warn a user (mods only)                                 |
+| `/timeout [user] [duration] [reason]`           | Timeout a user (mods only)                              |
+| `/inactiveusers`                                | Show the list of currently inactive users (mods only)   |
+| `/alert [reason]`                               | Notify all mods about rule-adjacent behavior            |
+| `/remindme [time] [message] [repeat] [privacy]` | Set a reminder (with optional repeat and privacy)       |
 
 ---
 
