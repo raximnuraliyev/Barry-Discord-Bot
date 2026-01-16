@@ -1,4 +1,4 @@
-# Barry Discord Bot
+# Barry Discord Bot!
 
 ![GitHub repo](https://img.shields.io/github/stars/raximnuraliyev/Barry-Discord-Bot?style=social)
 ![License](https://img.shields.io/github/license/raximnuraliyev/Barry-Discord-Bot)
