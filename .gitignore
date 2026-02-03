@@ -1,0 +1,4 @@
+git rm --cached reminders.json
+node_modules/
+.env
+*.json
