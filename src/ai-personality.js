@@ -18,25 +18,82 @@ class PersonalityHandler {
         this.cooldownPeriod = 10000; // 10 seconds between responses per user
         
         // AI Model configuration - Multiple free models for fallback (Updated Feb 2026)
+        // Using models from different providers to spread rate limits
         this.freeModels = [
+            'google/gemma-2-9b-it:free',
+            'microsoft/phi-3-mini-128k-instruct:free',
+            'microsoft/phi-3-medium-128k-instruct:free',
+            'huggingfaceh4/zephyr-7b-beta:free',
+            'openchat/openchat-7b:free',
+            'nousresearch/nous-capybara-7b:free',
+            'mistralai/mistral-7b-instruct:free',
             'meta-llama/llama-3.2-3b-instruct:free',
-            'google/gemma-3-12b-it:free',
-            'google/gemma-3-4b-it:free',
-            'qwen/qwen2.5-vl-7b-instruct:free',
-            'google/gemma-3n-e4b-it:free',
-            'meta-llama/llama-3.1-405b-instruct:free'
+            'google/gemma-3-4b-it:free'
         ];
         this.currentModelIndex = 0;
         this.aiModel = this.freeModels[0];
         this.apiEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
+        
+        // Rate limit tracking per model
+        this.rateLimitedModels = new Map(); // modelName -> timestamp when limit expires
+        this.rateLimitCooldown = 60 * 60 * 1000; // 1 hour cooldown for rate-limited models
+        
+        // Static fallback responses when AI is unavailable
+        this.fallbackResponses = [
+            "I'm taking a quick coffee break, eh. Give me a moment.",
+            "My brain's a bit foggy right now. Must be the Canadian winter.",
+            "Even Canadians need a breather sometimes.",
+            "Sorry aboot that, I'm a bit overloaded. Try again in a sec?",
+            "Hold on, processing... like maple syrup on a cold day.",
+            "My AI circuits are warming up. Canadian technology, you know.",
+            "I heard you, just collecting my thoughts. It's been a day.",
+            "Give me a moment, I'm running on Tim Hortons coffee fumes."
+        ];
     }
 
-    // Switch to next model on failure
-    switchToNextModel() {
-        this.currentModelIndex = (this.currentModelIndex + 1) % this.freeModels.length;
-        this.aiModel = this.freeModels[this.currentModelIndex];
+    // Switch to next available model (skipping rate-limited ones)
+    switchToNextModel(markCurrentAsLimited = false) {
+        const now = Date.now();
+        
+        // Mark current model as rate-limited if specified
+        if (markCurrentAsLimited) {
+            this.rateLimitedModels.set(this.aiModel, now + this.rateLimitCooldown);
+            console.log(`Model ${this.aiModel} rate-limited, cooling down for 1 hour`);
+        }
+        
+        // Find next available model that isn't rate-limited
+        let attempts = 0;
+        do {
+            this.currentModelIndex = (this.currentModelIndex + 1) % this.freeModels.length;
+            this.aiModel = this.freeModels[this.currentModelIndex];
+            attempts++;
+            
+            // Check if this model's rate limit has expired
+            const limitExpiry = this.rateLimitedModels.get(this.aiModel);
+            if (limitExpiry && now < limitExpiry) {
+                continue; // Skip this model, still rate-limited
+            } else if (limitExpiry) {
+                this.rateLimitedModels.delete(this.aiModel); // Clear expired limit
+            }
+            break;
+        } while (attempts < this.freeModels.length);
+        
         console.log(`Switched to AI model: ${this.aiModel}`);
         return this.aiModel;
+    }
+    
+    // Get a random fallback response
+    getStaticFallback() {
+        return this.fallbackResponses[Math.floor(Math.random() * this.fallbackResponses.length)];
+    }
+    
+    // Check if error is a rate limit error
+    isRateLimitError(error) {
+        const errorMsg = error.response?.data?.error?.message || error.message || '';
+        return errorMsg.toLowerCase().includes('rate limit') || 
+               errorMsg.includes('429') || 
+               errorMsg.includes('quota') ||
+               errorMsg.includes('too many requests');
     }
 
     async loadPersonalityData() {
@@ -111,21 +168,28 @@ class PersonalityHandler {
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://discord.com/barry-bot',
+                        'X-Title': 'Barry Discord Bot'
                     },
                     timeout: 15000
                 });
                 aiReply = response.data.choices[0].message.content.trim();
             } catch (error) {
-                console.error(`AI Response Error with ${this.aiModel}:`, error.response?.data?.error?.message || error.message);
-                this.switchToNextModel();
+                const errorMsg = error.response?.data?.error?.message || error.message;
+                console.error(`AI Response Error with ${this.aiModel}:`, errorMsg);
+                
+                // Check if it's a rate limit error and mark the model
+                const isRateLimit = this.isRateLimitError(error);
+                this.switchToNextModel(isRateLimit);
                 attempts++;
             }
         }
         
+        // Use static fallback if all AI models failed
         if (!aiReply) {
-            console.error('All AI models failed');
-            return null;
+            console.log('All AI models exhausted, using static fallback response');
+            aiReply = this.getStaticFallback();
         }
 
         // Update cooldown
@@ -178,14 +242,17 @@ Write a brief 1-2 sentence explanation. Don't use emojis. Sound like a tired but
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://discord.com/barry-bot',
+                        'X-Title': 'Barry Discord Bot'
                     },
                     timeout: 10000
                 });
                 return response.data.choices[0].message.content.trim();
             } catch (error) {
                 console.error(`AI Explanation Error with ${this.aiModel}:`, error.response?.data?.error?.message || error.message);
-                this.switchToNextModel();
+                const isRateLimit = this.isRateLimitError(error);
+                this.switchToNextModel(isRateLimit);
                 attempts++;
             }
         }
@@ -222,14 +289,17 @@ Explain why this rule exists in 2-3 sentences max. Sound like a reasonable perso
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://discord.com/barry-bot',
+                        'X-Title': 'Barry Discord Bot'
                     },
                     timeout: 10000
                 });
                 return response.data.choices[0].message.content.trim();
             } catch (error) {
                 console.error(`AI Rule Explanation Error with ${this.aiModel}:`, error.response?.data?.error?.message || error.message);
-                this.switchToNextModel();
+                const isRateLimit = this.isRateLimitError(error);
+                this.switchToNextModel(isRateLimit);
                 attempts++;
             }
         }
@@ -264,14 +334,17 @@ Provide a 2-3 sentence neutral summary and any recommendation. Be fair.`;
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://discord.com/barry-bot',
+                        'X-Title': 'Barry Discord Bot'
                     },
                     timeout: 10000
                 });
                 return response.data.choices[0].message.content.trim();
             } catch (error) {
                 console.error(`AI Appeal Summary Error with ${this.aiModel}:`, error.response?.data?.error?.message || error.message);
-                this.switchToNextModel();
+                const isRateLimit = this.isRateLimitError(error);
+                this.switchToNextModel(isRateLimit);
                 attempts++;
             }
         }
@@ -301,7 +374,9 @@ Tone:`;
                 }, {
                     headers: {
                         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'https://discord.com/barry-bot',
+                        'X-Title': 'Barry Discord Bot'
                     },
                     timeout: 10000
                 });
@@ -310,7 +385,8 @@ Tone:`;
                 return validTones.includes(tone) ? tone : 'neutral';
             } catch (error) {
                 console.error(`AI Tone Detection Error with ${this.aiModel}:`, error.response?.data?.error?.message || error.message);
-                this.switchToNextModel();
+                const isRateLimit = this.isRateLimitError(error);
+                this.switchToNextModel(isRateLimit);
                 attempts++;
             }
         }
