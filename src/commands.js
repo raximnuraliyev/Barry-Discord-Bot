@@ -624,6 +624,42 @@ class CommandHandler {
                         .setRequired(false)
                 ),
 
+            new SlashCommandBuilder()
+                .setName('rank')
+                .setDescription('View your game rank on this server')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to view (default: yourself)')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
+                .setName('ranks')
+                .setDescription('View the server rankings with pagination')
+                .addStringOption(option =>
+                    option.setName('game')
+                        .setDescription('Filter by game type')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'All Games', value: 'all' },
+                            { name: '⚡ Reflex Roulette', value: 'reflex' },
+                            { name: '🧠 Mind Lock', value: 'mindlock' },
+                            { name: '⏱️ Time Trap', value: 'timetrap' },
+                            { name: '🎭 Bluff or Bust', value: 'bluff' },
+                            { name: '📚 Word Heist', value: 'wordheist' },
+                            { name: '🗳️ Chaos Vote', value: 'chaosvote' },
+                            { name: '🚨 Button Panic', value: 'buttonpanic' },
+                            { name: '🤠 Duel Draw', value: 'dueldraw' },
+                            { name: '🧩 Logic Grid', value: 'logicgrid' }
+                        )
+                )
+                .addIntegerOption(option =>
+                    option.setName('page')
+                        .setDescription('Page number')
+                        .setRequired(false)
+                        .setMinValue(1)
+                ),
+
             // ===========================================
             // DOCUMENTATION
             // ===========================================
@@ -738,6 +774,8 @@ class CommandHandler {
                 case 'leaderboard': return await this.handleLeaderboard(interaction);
                 case 'achievements': return await this.handleAchievements(interaction);
                 case 'gamestats': return await this.handleGameStats(interaction);
+                case 'rank': return await this.handleRank(interaction);
+                case 'ranks': return await this.handleRanks(interaction);
                 
                 // Documentation
                 case 'help': return await this.handleHelp(interaction);
@@ -2224,9 +2262,12 @@ class CommandHandler {
                 reflex: '⚡ Reflex',
                 mindlock: '🧠 Mind Lock',
                 timetrap: '⏱️ Time Trap',
+                bluff: '🎭 Bluff or Bust',
+                wordheist: '📚 Word Heist',
+                chaosvote: '🗳️ Chaos Vote',
                 buttonpanic: '🚨 Button Panic',
                 dueldraw: '🤠 Duel Draw',
-                chaosvote: '🗳️ Chaos Vote'
+                logicgrid: '🧩 Logic Grid'
             };
 
             if (stats.gameStats) {
@@ -2260,6 +2301,254 @@ class CommandHandler {
         } catch (error) {
             console.error('Game stats error:', error);
             return await interaction.reply({ content: 'Failed to load stats.', ephemeral: true });
+        }
+    }
+
+    async handleRank(interaction) {
+        const targetUser = interaction.options.getUser('user') || interaction.user;
+        const guildId = interaction.guild.id;
+
+        try {
+            const { UserGameStats } = require('./models');
+            
+            // Get all players' stats to calculate rank
+            const allStats = await UserGameStats.find({ guildId })
+                .sort({ totalWins: -1, totalGamesPlayed: -1 });
+            
+            const userStats = allStats.find(s => s.odUserId === targetUser.id);
+            
+            if (!userStats) {
+                return await interaction.reply({ 
+                    content: `${targetUser.username} hasn't played any games yet! Start with \`/game\``, 
+                    ephemeral: true 
+                });
+            }
+
+            const rank = allStats.findIndex(s => s.odUserId === targetUser.id) + 1;
+            const totalPlayers = allStats.length;
+            const percentile = Math.round((1 - (rank / totalPlayers)) * 100);
+
+            // Determine rank tier
+            let tier, tierColor, tierEmoji;
+            if (rank === 1) { tier = 'Champion'; tierColor = 0xFFD700; tierEmoji = '👑'; }
+            else if (rank <= 3) { tier = 'Elite'; tierColor = 0xE91E63; tierEmoji = '💎'; }
+            else if (rank <= 10) { tier = 'Veteran'; tierColor = 0x9B59B6; tierEmoji = '🏆'; }
+            else if (percentile >= 75) { tier = 'Expert'; tierColor = 0x3498DB; tierEmoji = '⭐'; }
+            else if (percentile >= 50) { tier = 'Skilled'; tierColor = 0x2ECC71; tierEmoji = '🎮'; }
+            else if (percentile >= 25) { tier = 'Rising'; tierColor = 0xF1C40F; tierEmoji = '📈'; }
+            else { tier = 'Newcomer'; tierColor = 0x95A5A6; tierEmoji = '🌱'; }
+
+            const winRate = userStats.totalGamesPlayed > 0 
+                ? Math.round((userStats.totalWins / userStats.totalGamesPlayed) * 100) 
+                : 0;
+
+            const embed = new EmbedBuilder()
+                .setColor(tierColor)
+                .setTitle(`${tierEmoji} ${targetUser.username}'s Rank`)
+                .setThumbnail(targetUser.displayAvatarURL())
+                .setDescription(`**${tier}** • Top ${percentile}%`)
+                .addFields(
+                    { name: '🏅 Server Rank', value: `#${rank} of ${totalPlayers}`, inline: true },
+                    { name: '🎯 Win Rate', value: `${winRate}%`, inline: true },
+                    { name: '🎮 Games Played', value: `${userStats.totalGamesPlayed}`, inline: true },
+                    { name: '🏆 Total Wins', value: `${userStats.totalWins}`, inline: true },
+                    { name: '🔥 Daily Streak', value: `${userStats.dailyChallengeStreak || 0}`, inline: true },
+                    { name: '📈 Best Streak', value: `${userStats.bestWinStreak || 0}`, inline: true }
+                )
+                .setFooter({ text: `Use /ranks to see the full leaderboard!` })
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            console.error('Rank error:', error);
+            return await interaction.reply({ content: 'Failed to load rank.', ephemeral: true });
+        }
+    }
+
+    async handleRanks(interaction) {
+        const guildId = interaction.guild.id;
+        const gameFilter = interaction.options.getString('game') || 'all';
+        const page = interaction.options.getInteger('page') || 1;
+        const perPage = 10;
+
+        try {
+            const { UserGameStats, LeaderboardEntry } = require('./models');
+            
+            let allStats;
+            let title;
+            
+            const gameNames = {
+                reflex: '⚡ Reflex Roulette',
+                mindlock: '🧠 Mind Lock',
+                timetrap: '⏱️ Time Trap',
+                bluff: '🎭 Bluff or Bust',
+                wordheist: '📚 Word Heist',
+                chaosvote: '🗳️ Chaos Vote',
+                buttonpanic: '🚨 Button Panic',
+                dueldraw: '🤠 Duel Draw',
+                logicgrid: '🧩 Logic Grid'
+            };
+
+            if (gameFilter === 'all') {
+                allStats = await UserGameStats.find({ guildId })
+                    .sort({ totalWins: -1, totalGamesPlayed: -1 });
+                title = '🏆 Server Rankings - All Games';
+            } else {
+                // Get leaderboard for specific game
+                allStats = await LeaderboardEntry.find({ guildId, gameType: gameFilter, period: 'alltime' })
+                    .sort({ wins: -1, gamesPlayed: -1 });
+                title = `🏆 Server Rankings - ${gameNames[gameFilter] || gameFilter}`;
+            }
+
+            if (!allStats || allStats.length === 0) {
+                return await interaction.reply({ 
+                    content: 'No rankings yet! Start playing with `/game` to get on the board!', 
+                    ephemeral: true 
+                });
+            }
+
+            const totalPages = Math.ceil(allStats.length / perPage);
+            const currentPage = Math.min(page, totalPages);
+            const startIdx = (currentPage - 1) * perPage;
+            const endIdx = startIdx + perPage;
+            const pageStats = allStats.slice(startIdx, endIdx);
+
+            // Build rankings display
+            let rankingsText = '';
+            for (let i = 0; i < pageStats.length; i++) {
+                const rank = startIdx + i + 1;
+                const stat = pageStats[i];
+                const username = stat.username || `User ${stat.odUserId?.slice(-4) || '????'}`;
+                const wins = gameFilter === 'all' ? stat.totalWins : stat.wins;
+                const games = gameFilter === 'all' ? stat.totalGamesPlayed : stat.gamesPlayed;
+                const winRate = games > 0 ? Math.round((wins / games) * 100) : 0;
+                
+                let medal = '';
+                if (rank === 1) medal = '🥇';
+                else if (rank === 2) medal = '🥈';
+                else if (rank === 3) medal = '🥉';
+                else medal = `**${rank}.**`;
+                
+                rankingsText += `${medal} **${username}** — ${wins}W / ${games}P (${winRate}%)\n`;
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0xFFD700)
+                .setTitle(title)
+                .setDescription(rankingsText || 'No players yet!')
+                .setFooter({ text: `Page ${currentPage}/${totalPages} • ${allStats.length} total players` })
+                .setTimestamp();
+
+            // Create pagination buttons
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`ranks_prev_${gameFilter}_${currentPage}`)
+                    .setLabel('◀ Previous')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage <= 1),
+                new ButtonBuilder()
+                    .setCustomId(`ranks_page_${gameFilter}_${currentPage}`)
+                    .setLabel(`${currentPage}/${totalPages}`)
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId(`ranks_next_${gameFilter}_${currentPage}`)
+                    .setLabel('Next ▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage >= totalPages)
+            );
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+        } catch (error) {
+            console.error('Ranks error:', error);
+            return await interaction.reply({ content: 'Failed to load rankings.', ephemeral: true });
+        }
+    }
+
+    async handleRanksPagination(interaction, gameFilter, page) {
+        const guildId = interaction.guild.id;
+        const perPage = 10;
+
+        try {
+            const { UserGameStats, LeaderboardEntry } = require('./models');
+            
+            let allStats;
+            let title;
+            
+            const gameNames = {
+                reflex: '⚡ Reflex Roulette',
+                mindlock: '🧠 Mind Lock',
+                timetrap: '⏱️ Time Trap',
+                bluff: '🎭 Bluff or Bust',
+                wordheist: '📚 Word Heist',
+                chaosvote: '🗳️ Chaos Vote',
+                buttonpanic: '🚨 Button Panic',
+                dueldraw: '🤠 Duel Draw',
+                logicgrid: '🧩 Logic Grid'
+            };
+
+            if (gameFilter === 'all') {
+                allStats = await UserGameStats.find({ guildId })
+                    .sort({ totalWins: -1, totalGamesPlayed: -1 });
+                title = '🏆 Server Rankings - All Games';
+            } else {
+                allStats = await LeaderboardEntry.find({ guildId, gameType: gameFilter, period: 'alltime' })
+                    .sort({ wins: -1, gamesPlayed: -1 });
+                title = `🏆 Server Rankings - ${gameNames[gameFilter] || gameFilter}`;
+            }
+
+            const totalPages = Math.ceil(allStats.length / perPage);
+            const currentPage = Math.max(1, Math.min(page, totalPages));
+            const startIdx = (currentPage - 1) * perPage;
+            const pageStats = allStats.slice(startIdx, startIdx + perPage);
+
+            let rankingsText = '';
+            for (let i = 0; i < pageStats.length; i++) {
+                const rank = startIdx + i + 1;
+                const stat = pageStats[i];
+                const username = stat.username || `User ${stat.odUserId?.slice(-4) || '????'}`;
+                const wins = gameFilter === 'all' ? stat.totalWins : stat.wins;
+                const games = gameFilter === 'all' ? stat.totalGamesPlayed : stat.gamesPlayed;
+                const winRate = games > 0 ? Math.round((wins / games) * 100) : 0;
+                
+                let medal = '';
+                if (rank === 1) medal = '🥇';
+                else if (rank === 2) medal = '🥈';
+                else if (rank === 3) medal = '🥉';
+                else medal = `**${rank}.**`;
+                
+                rankingsText += `${medal} **${username}** — ${wins}W / ${games}P (${winRate}%)\n`;
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0xFFD700)
+                .setTitle(title)
+                .setDescription(rankingsText || 'No players yet!')
+                .setFooter({ text: `Page ${currentPage}/${totalPages} • ${allStats.length} total players` })
+                .setTimestamp();
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`ranks_prev_${gameFilter}_${currentPage}`)
+                    .setLabel('◀ Previous')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage <= 1),
+                new ButtonBuilder()
+                    .setCustomId(`ranks_page_${gameFilter}_${currentPage}`)
+                    .setLabel(`${currentPage}/${totalPages}`)
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(true),
+                new ButtonBuilder()
+                    .setCustomId(`ranks_next_${gameFilter}_${currentPage}`)
+                    .setLabel('Next ▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPage >= totalPages)
+            );
+
+            await interaction.update({ embeds: [embed], components: [row] });
+        } catch (error) {
+            console.error('Ranks pagination error:', error);
+            await interaction.reply({ content: 'Failed to load rankings.', ephemeral: true });
         }
     }
 
@@ -2374,6 +2663,44 @@ class CommandHandler {
                 if (session) {
                     return await this.games.handleDuelClick(interaction, session);
                 }
+            }
+
+            // Bluff or Bust voting
+            if (customId.startsWith('bluff_vote_')) {
+                const parts = customId.split('_');
+                const gameId = parts[2];
+                const votedFor = parts[3];
+                const session = this.games.activeSessions.get(gameId);
+                if (session && session.state === 'voting') {
+                    // Can't vote for yourself
+                    if (votedFor === interaction.user.id) {
+                        return await interaction.reply({ content: 'You can\'t vote for yourself!', ephemeral: true });
+                    }
+                    session.gameData.votes[interaction.user.id] = votedFor;
+                    this.games.activeSessions.set(gameId, session);
+                    return await interaction.reply({ content: '🔍 Vote recorded! Waiting for others...', ephemeral: true });
+                }
+            }
+
+            // Word Heist skip
+            if (customId.startsWith('wordheist_skip_')) {
+                const gameId = customId.replace('wordheist_skip_', '');
+                const session = this.games.activeSessions.get(gameId);
+                if (session) {
+                    return await this.games.handleWordHeistSkip(interaction, session);
+                }
+            }
+
+            // Ranks pagination
+            if (customId.startsWith('ranks_prev_') || customId.startsWith('ranks_next_')) {
+                const parts = customId.split('_');
+                const direction = parts[1]; // prev or next
+                const gameFilter = parts[2];
+                const currentPage = parseInt(parts[3]);
+                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
+                
+                // Re-run the ranks query with new page
+                return await this.handleRanksPagination(interaction, gameFilter, newPage);
             }
 
         } catch (error) {

@@ -442,7 +442,7 @@ const leaderboardEntrySchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 leaderboardEntrySchema.index({ guildId: 1, gameType: 1, period: 1, wins: -1 });
-leaderboardEntrySchema.index({ guildId: 1, odUserId: 1, gameType: 1, period: 1 }, { unique: true });
+leaderboardEntrySchema.index({ guildId: 1, odUserId: 1, gameType: 1, period: 1, periodKey: 1 }, { unique: true, sparse: true });
 
 // User Game Stats - Aggregate stats
 const userGameStatsSchema = new mongoose.Schema({
@@ -504,6 +504,20 @@ const dailyResultSchema = new mongoose.Schema({
 });
 dailyResultSchema.index({ date: 1, guildId: 1, odUserId: 1 }, { unique: true });
 
+// AI Prompt Cache - Store AI responses to avoid wasting tokens on repeated questions
+const aiPromptCacheSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, index: true },
+    userId: { type: String, required: true, index: true },
+    promptHash: { type: String, required: true }, // Hash of the original message
+    originalPrompt: { type: String, required: true },
+    response: { type: String, required: true },
+    model: { type: String }, // Which AI model generated this
+    context: { type: mongoose.Schema.Types.Mixed }, // Context used
+    createdAt: { type: Date, default: Date.now }
+});
+aiPromptCacheSchema.index({ guildId: 1, userId: 1, promptHash: 1 }, { unique: true });
+aiPromptCacheSchema.index({ createdAt: 1 }, { expireAfterSeconds: 604800 }); // 7 days TTL
+
 module.exports = {
     // Layer 1: Rules
     OffensiveWord: mongoose.model('OffensiveWord', offensiveWordSchema),
@@ -537,5 +551,7 @@ module.exports = {
     DailyChallenge: mongoose.model('DailyChallenge', dailyChallengeSchema),
     DailyResult: mongoose.model('DailyResult', dailyResultSchema),
     // Active Users (immune to auto-mod)
-    ActiveUser: mongoose.model('ActiveUser', activeUserSchema)
+    ActiveUser: mongoose.model('ActiveUser', activeUserSchema),
+    // AI System
+    AIPromptCache: mongoose.model('AIPromptCache', aiPromptCacheSchema)
 };

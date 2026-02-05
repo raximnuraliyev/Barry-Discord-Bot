@@ -47,6 +47,64 @@ class GameHandler {
         return comments[Math.floor(Math.random() * comments.length)];
     }
 
+    /**
+     * Create a beautiful winner announcement embed
+     */
+    createWinnerEmbed(gameType, winner, stats = {}) {
+        const gameInfo = {
+            reflex: { name: 'Reflex Roulette', icon: '⚡', color: 0x5865F2 },
+            mindlock: { name: 'Mind Lock', icon: '🧠', color: 0x9B59B6 },
+            timetrap: { name: 'Time Trap', icon: '⏱️', color: 0x3498DB },
+            bluff: { name: 'Bluff or Bust', icon: '🎭', color: 0xE74C3C },
+            wordheist: { name: 'Word Heist', icon: '📚', color: 0x2ECC71 },
+            chaosvote: { name: 'Chaos Vote', icon: '🗳️', color: 0xE91E63 },
+            buttonpanic: { name: 'Button Panic', icon: '🚨', color: 0xE74C3C },
+            dueldraw: { name: 'Duel Draw', icon: '🤠', color: 0x8B4513 },
+            logicgrid: { name: 'Logic Grid', icon: '🧩', color: 0x9B59B6 }
+        };
+
+        const game = gameInfo[gameType] || { name: gameType, icon: '🎮', color: 0x5865F2 };
+        
+        // Celebration messages
+        const celebrations = [
+            '🎉 **VICTORY!** 🎉',
+            '👑 **CHAMPION CROWNED!** 👑',
+            '🏆 **WINNER WINNER!** 🏆',
+            '⭐ **SPECTACULAR WIN!** ⭐',
+            '🔥 **DOMINATION!** 🔥'
+        ];
+        const celebration = celebrations[Math.floor(Math.random() * celebrations.length)];
+
+        const embed = new EmbedBuilder()
+            .setColor(game.color)
+            .setTitle(`${game.icon} ${game.name} - Results`)
+            .setDescription(`${celebration}\n\n🥇 **${winner.username || winner}** takes the win!`)
+            .setTimestamp();
+
+        // Add stats if provided
+        if (stats.score !== undefined) {
+            embed.addFields({ name: '📊 Score', value: `${stats.score}`, inline: true });
+        }
+        if (stats.time !== undefined) {
+            embed.addFields({ name: '⏱️ Time', value: `${stats.time}ms`, inline: true });
+        }
+        if (stats.rounds !== undefined) {
+            embed.addFields({ name: '🔄 Rounds', value: `${stats.rounds}`, inline: true });
+        }
+
+        // Add Barry's comment
+        embed.addFields({ 
+            name: '💬 Barry says:', 
+            value: this.getComment('win'),
+            inline: false 
+        });
+
+        // Add CTA
+        embed.setFooter({ text: '🏆 Check your rank with /rank • View all rankings with /ranks' });
+
+        return embed;
+    }
+
     generateGameId() {
         return `game-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
@@ -188,22 +246,34 @@ class GameHandler {
 
         const message = await interaction.message.edit({ embeds: [goEmbed], components: [row] });
 
-        // Wait for first click (10 second timeout)
-        try {
-            const collected = await message.awaitMessageComponent({
-                filter: i => i.customId === `reflex_hit_${session.gameId}` && 
-                            session.players.some(p => p.odUserId === i.user.id),
-                time: 10000,
-                componentType: ComponentType.Button
-            });
+        // Get player IDs for filter - store them before the async operation
+        const playerIds = session.players.map(p => p.odUserId);
+        const gameId = session.gameId;
 
+        // Create collector instead of awaitMessageComponent for better reliability
+        const collector = message.createMessageComponentCollector({
+            filter: i => {
+                // Check if button matches and user is in game
+                const isCorrectButton = i.customId === `reflex_hit_${gameId}`;
+                const isPlayer = playerIds.includes(i.user.id);
+                return isCorrectButton && isPlayer;
+            },
+            time: 10000,
+            max: 1,
+            componentType: ComponentType.Button
+        });
+
+        collector.on('collect', async (collected) => {
             const reactionTime = Date.now() - session.gameData.startTime;
             await this.handleReflexWin(collected, session, reactionTime);
+        });
 
-        } catch {
-            // Timeout - no winner
-            await this.handleReflexTimeout(interaction.message, session);
-        }
+        collector.on('end', async (collected) => {
+            if (collected.size === 0) {
+                // Timeout - no winner
+                await this.handleReflexTimeout(message, session);
+            }
+        });
     }
 
     async handleReflexWin(interaction, session, reactionTime) {
@@ -213,20 +283,26 @@ class GameHandler {
         this.activeSessions.delete(session.gameId);
 
         // Determine rating
-        let rating, color;
-        if (reactionTime < 150) { rating = '🏆 INHUMAN!'; color = 0xFFD700; }
-        else if (reactionTime < 200) { rating = '⚡ Incredible!'; color = 0x9B59B6; }
-        else if (reactionTime < 300) { rating = '⭐ Excellent!'; color = 0x2ECC71; }
-        else if (reactionTime < 500) { rating = '👍 Good!'; color = 0x3498DB; }
-        else { rating = '👌 Decent'; color = 0x95A5A6; }
+        let rating, color, ratingEmoji;
+        if (reactionTime < 150) { rating = 'INHUMAN!'; color = 0xFFD700; ratingEmoji = '🏆'; }
+        else if (reactionTime < 200) { rating = 'Incredible!'; color = 0x9B59B6; ratingEmoji = '⚡'; }
+        else if (reactionTime < 300) { rating = 'Excellent!'; color = 0x2ECC71; ratingEmoji = '⭐'; }
+        else if (reactionTime < 500) { rating = 'Good!'; color = 0x3498DB; ratingEmoji = '👍'; }
+        else { rating = 'Decent'; color = 0x95A5A6; ratingEmoji = '👌'; }
+
+        // Celebration messages
+        const celebrations = ['🎉 VICTORY! 🎉', '👑 CHAMPION! 👑', '🏆 WINNER! 🏆', '⭐ IMPRESSIVE! ⭐'];
+        const celebration = celebrations[Math.floor(Math.random() * celebrations.length)];
 
         const embed = new EmbedBuilder()
             .setColor(color)
-            .setTitle('⚡ Reflex Roulette - Results')
-            .setDescription(`🎉 **${winner.username}** wins!\n\n⏱️ **${reactionTime}ms**\n${rating}`)
-            .addFields({ name: 'Barry says:', value: this.getComment(reactionTime < 300 ? 'win' : 'close') })
+            .setTitle(`⚡ Reflex Roulette`)
+            .setDescription(`${celebration}\n\n🥇 **${winner.username}** wins!\n\n⏱️ **${reactionTime}ms** ${ratingEmoji} ${rating}`)
             .setThumbnail(winner.displayAvatarURL())
-            .setFooter({ text: `Game ID: ${session.gameId}` })
+            .addFields(
+                { name: '💬 Barry says:', value: this.getComment(reactionTime < 300 ? 'win' : 'close') }
+            )
+            .setFooter({ text: '🏆 /rank to see your ranking • /ranks for leaderboard' })
             .setTimestamp();
 
         await interaction.update({ embeds: [embed], components: [] });
@@ -323,18 +399,17 @@ class GameHandler {
             .setDescription(`**Watch carefully!**\n\n${sequenceStr}`)
             .setFooter({ text: 'Memorize this pattern...' });
 
-        // Use message edit for subsequent rounds to avoid InteractionAlreadyReplied error
+        // Always use channel/message fetch for reliability
         try {
-            if (interaction.message) {
-                await interaction.message.edit({ embeds: [showEmbed], components: [] });
-            } else {
-                await interaction.update({ embeds: [showEmbed], components: [] });
-            }
-        } catch (e) {
-            // Fallback: fetch channel and edit
             const channel = interaction.channel || await interaction.client.channels.fetch(session.channelId);
             const msg = await channel.messages.fetch(session.messageId);
             await msg.edit({ embeds: [showEmbed], components: [] });
+        } catch (e) {
+            console.error('Mind Lock show sequence error:', e.message);
+            // If we have an interaction, try to update it
+            if (interaction.update) {
+                try { await interaction.update({ embeds: [showEmbed], components: [] }); } catch {}
+            }
         }
 
         // Wait, then hide and show buttons
@@ -404,11 +479,17 @@ class GameHandler {
                 .setDescription(`**Now recreate the pattern!**\n\nSequence length: ${expectedLength}\nYour input: ${inputStr}`)
                 .setFooter({ text: `${currentInput.length}/${expectedLength} - Keep going!` });
 
+            // Use deferUpdate + editReply for reliability
             try {
-                await interaction.update({ embeds: [inputEmbed] });
-            } catch (e) {
-                // Fallback to message edit
+                await interaction.deferUpdate();
                 await interaction.message.edit({ embeds: [inputEmbed] });
+            } catch (e) {
+                // Fallback: fetch and edit message directly
+                try {
+                    const channel = await interaction.client.channels.fetch(session.channelId);
+                    const msg = await channel.messages.fetch(session.messageId);
+                    await msg.edit({ embeds: [inputEmbed] });
+                } catch {}
             }
             this.activeSessions.set(session.gameId, session);
             return;
@@ -435,9 +516,14 @@ class GameHandler {
                     .setFooter({ text: 'Next round starting...' });
 
                 try {
-                    await interaction.update({ embeds: [successEmbed], components: [] });
-                } catch (e) {
+                    await interaction.deferUpdate();
                     await interaction.message.edit({ embeds: [successEmbed], components: [] });
+                } catch (e) {
+                    try {
+                        const channel = await interaction.client.channels.fetch(session.channelId);
+                        const msg = await channel.messages.fetch(session.messageId);
+                        await msg.edit({ embeds: [successEmbed], components: [] });
+                    } catch {}
                 }
                 this.activeSessions.set(session.gameId, session);
 
@@ -571,6 +657,185 @@ class GameHandler {
         await GameSession.create(session);
 
         return session;
+    }
+
+    // ===========================================
+    // RUN BLUFF OR BUST GAME
+    // ===========================================
+
+    async runBluffOrBust(interaction, session) {
+        session.state = 'answering';
+        session.round++;
+        session.gameData.answers = {};
+        
+        // Pick random question
+        const question = session.gameData.questions[Math.floor(Math.random() * session.gameData.questions.length)];
+        session.gameData.currentQuestion = question;
+        
+        // Pick random player to be the "bluffer" (gives fake answer)
+        const blufferIndex = Math.floor(Math.random() * session.players.length);
+        session.gameData.fakeAuthor = session.players[blufferIndex].odUserId;
+        
+        this.activeSessions.set(session.gameId, session);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle(`🎭 Bluff or Bust - Round ${session.round}`)
+            .setDescription(`**Question:** ${question}\n\n📝 *Check your DMs to submit your answer!*\n\n⏰ You have 60 seconds.`)
+            .addFields({ name: 'Players', value: session.players.map(p => `${p.odUserId === session.gameData.fakeAuthor ? '🎭' : '✍️'} ${p.username}`).join('\n') })
+            .setFooter({ text: `Game ID: ${session.gameId}` });
+
+        await interaction.update({ embeds: [embed], components: [] });
+
+        // DM each player for their answer
+        for (const player of session.players) {
+            try {
+                const user = await interaction.client.users.fetch(player.odUserId);
+                const isBluffer = player.odUserId === session.gameData.fakeAuthor;
+                
+                const dmEmbed = new EmbedBuilder()
+                    .setColor(isBluffer ? 0xE74C3C : 0x3498DB)
+                    .setTitle(isBluffer ? '🎭 You are the BLUFFER!' : '✍️ Answer Time!')
+                    .setDescription(`**Question:** ${question}\n\n${isBluffer 
+                        ? '**Make up a believable LIE!** Others will try to spot it.'
+                        : '**Answer truthfully.** One player is bluffing - you\'ll have to spot them!'}`)
+                    .setFooter({ text: 'Reply to this message with your answer (60 seconds)' });
+
+                const dm = await user.send({ embeds: [dmEmbed] });
+                
+                // Collect answer
+                const filter = m => m.author.id === player.odUserId;
+                const collected = await dm.channel.awaitMessages({ filter, max: 1, time: 60000 });
+                
+                if (collected.size > 0) {
+                    session.gameData.answers[player.odUserId] = {
+                        answer: collected.first().content,
+                        username: player.username,
+                        isBluff: isBluffer
+                    };
+                    await user.send('✅ Answer received!');
+                }
+            } catch (err) {
+                console.error(`Failed to DM ${player.username}:`, err.message);
+            }
+        }
+
+        this.activeSessions.set(session.gameId, session);
+
+        // Move to voting phase
+        await this.bluffVotingPhase(interaction.message, session);
+    }
+
+    async bluffVotingPhase(message, session) {
+        session.state = 'voting';
+        session.gameData.votes = {};
+        this.activeSessions.set(session.gameId, session);
+
+        const answers = Object.entries(session.gameData.answers);
+        if (answers.length < 2) {
+            // Not enough answers
+            const embed = new EmbedBuilder()
+                .setColor(0xE74C3C)
+                .setTitle('🎭 Bluff or Bust - Not Enough Answers!')
+                .setDescription('Not enough players submitted answers. Game cancelled.')
+                .setTimestamp();
+            return message.edit({ embeds: [embed], components: [] });
+        }
+
+        // Shuffle answers so bluffer isn't obvious
+        const shuffledAnswers = answers.sort(() => Math.random() - 0.5);
+        
+        let answerList = '';
+        shuffledAnswers.forEach(([odUserId, data], i) => {
+            answerList += `**${i + 1}.** "${data.answer}" - *${data.username}*\n`;
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0xF1C40F)
+            .setTitle('🎭 Bluff or Bust - Who\'s the BLUFFER?')
+            .setDescription(`**Question:** ${session.gameData.currentQuestion}\n\n**Answers:**\n${answerList}\n\n🔍 Vote for who you think is BLUFFING!`)
+            .setFooter({ text: 'Voting ends in 30 seconds' });
+
+        // Create vote buttons
+        const voteButtons = shuffledAnswers.slice(0, 5).map(([odUserId, data], i) => 
+            new ButtonBuilder()
+                .setCustomId(`bluff_vote_${session.gameId}_${odUserId}`)
+                .setLabel(`${i + 1}. ${data.username}`)
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        const rows = [];
+        for (let i = 0; i < voteButtons.length; i += 5) {
+            rows.push(new ActionRowBuilder().addComponents(voteButtons.slice(i, i + 5)));
+        }
+
+        await message.edit({ embeds: [embed], components: rows });
+
+        // End voting after 30 seconds
+        setTimeout(() => this.finishBluffOrBust(message, session), 30000);
+    }
+
+    async finishBluffOrBust(message, session) {
+        if (session.state !== 'voting') return;
+        
+        session.state = 'finished';
+        this.activeSessions.delete(session.gameId);
+
+        const blufferId = session.gameData.fakeAuthor;
+        const bluffer = session.players.find(p => p.odUserId === blufferId);
+        
+        // Count correct guesses
+        let correctGuesses = 0;
+        const voters = [];
+        for (const [voterId, votedFor] of Object.entries(session.gameData.votes)) {
+            const voter = session.players.find(p => p.odUserId === voterId);
+            const wasCorrect = votedFor === blufferId;
+            if (wasCorrect) correctGuesses++;
+            voters.push({ username: voter?.username || 'Unknown', correct: wasCorrect });
+        }
+
+        // Bluffer wins if less than half guessed correctly
+        const blufferWins = correctGuesses < session.players.length / 2;
+        
+        let resultsText = voters.map(v => 
+            `${v.correct ? '✅' : '❌'} ${v.username}`
+        ).join('\n') || 'No votes cast!';
+
+        const embed = new EmbedBuilder()
+            .setColor(blufferWins ? 0xE74C3C : 0x2ECC71)
+            .setTitle('🎭 Bluff or Bust - Revealed!')
+            .setDescription(`**The BLUFFER was:** 🎭 **${bluffer?.username}**\n\n${blufferWins 
+                ? '😈 **The bluffer fooled everyone!**' 
+                : '🔍 **The bluffer was caught!**'}\n\n**Votes:**\n${resultsText}`)
+            .addFields(
+                { name: 'Correct Guesses', value: `${correctGuesses}/${Object.keys(session.gameData.votes).length}`, inline: true },
+                { name: 'Winner', value: blufferWins ? `🎭 ${bluffer?.username}` : 'The Detectives!', inline: true }
+            )
+            .setTimestamp();
+
+        await message.edit({ embeds: [embed], components: [] });
+
+        // Save results
+        if (blufferWins) {
+            await this.saveGameResult(session, blufferId, bluffer?.username, 100, true);
+        } else {
+            // Award points to correct guessers
+            for (const [voterId, votedFor] of Object.entries(session.gameData.votes)) {
+                if (votedFor === blufferId) {
+                    const voter = session.players.find(p => p.odUserId === voterId);
+                    await this.saveGameResult(session, voterId, voter?.username, 50, true);
+                }
+            }
+        }
+
+        // Achievement check
+        const blufferVoteCount = Object.values(session.gameData.votes).filter(v => v !== blufferId).length;
+        if (blufferVoteCount >= 3) {
+            // Bluffer got caught many times
+            await this.grantAchievement(session.guildId, blufferId, 'bad_bluffer');
+        }
+
+        await this.postToGameResults(await message.client.guilds.fetch(session.guildId), embed);
     }
 
     // ===========================================
@@ -775,6 +1040,185 @@ class GameHandler {
     }
 
     // ===========================================
+    // RUN WORD HEIST GAME
+    // ===========================================
+
+    async runWordHeist(interaction, session) {
+        session.state = 'active';
+        session.gameData.words = [];
+        session.gameData.currentTurn = 0;
+        session.gameData.startTime = Date.now();
+        this.activeSessions.set(session.gameId, session);
+
+        await this.wordHeistTurn(interaction.message, session);
+    }
+
+    async wordHeistTurn(message, session) {
+        if (!this.activeSessions.has(session.gameId)) return;
+        
+        const currentPlayer = session.players[session.gameData.currentTurn % session.players.length];
+        const wordList = session.gameData.words.length > 0 
+            ? session.gameData.words.slice(-10).join(', ') 
+            : '(none yet)';
+
+        const embed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setTitle(`📚 Word Heist - ${session.gameData.category}`)
+            .setDescription(`**${currentPlayer.username}'s turn!**\n\nType a word that fits the category.\n\n**Words so far:** ${wordList}\n**Total:** ${session.gameData.words.length} words`)
+            .addFields({ name: '⏰ Time Limit', value: '15 seconds', inline: true })
+            .setFooter({ text: `No repeats allowed! • Round ${session.gameData.words.length + 1}` });
+
+        const skipButton = new ButtonBuilder()
+            .setCustomId(`wordheist_skip_${session.gameId}`)
+            .setLabel('⏭️ Skip Turn (Lose)')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(skipButton);
+
+        await message.edit({ embeds: [embed], components: [row] });
+
+        // Wait for message in channel
+        const channel = message.channel;
+        const filter = m => m.author.id === currentPlayer.odUserId && !m.author.bot;
+        
+        try {
+            const collected = await channel.awaitMessages({ 
+                filter, 
+                max: 1, 
+                time: session.gameData.turnTimeLimit,
+                errors: ['time']
+            });
+
+            const word = collected.first().content.toLowerCase().trim();
+            
+            // Delete the message to keep chat clean
+            try { await collected.first().delete(); } catch {}
+
+            // Validate word
+            if (session.gameData.words.includes(word)) {
+                // Duplicate! Player loses
+                await this.endWordHeist(message, session, currentPlayer, 'duplicate', word);
+                return;
+            }
+
+            // Word is valid
+            session.gameData.words.push(word);
+            currentPlayer.words = (currentPlayer.words || 0) + 1;
+            session.gameData.currentTurn++;
+            this.activeSessions.set(session.gameId, session);
+
+            // Quick feedback
+            const feedbackEmbed = new EmbedBuilder()
+                .setColor(0x2ECC71)
+                .setDescription(`✅ **${currentPlayer.username}** added: **${word}**`)
+                .setTimestamp();
+
+            await message.edit({ embeds: [feedbackEmbed], components: [] });
+
+            // Continue to next turn after short delay
+            setTimeout(() => {
+                if (this.activeSessions.has(session.gameId)) {
+                    this.wordHeistTurn(message, session);
+                }
+            }, 1500);
+
+        } catch {
+            // Timeout - player loses
+            await this.endWordHeist(message, session, currentPlayer, 'timeout');
+        }
+    }
+
+    async endWordHeist(message, session, losingPlayer, reason, word = null) {
+        session.state = 'finished';
+        this.activeSessions.delete(session.gameId);
+        await GameSession.deleteOne({ gameId: session.gameId });
+
+        const timePlayed = Math.floor((Date.now() - session.gameData.startTime) / 1000);
+        const totalWords = session.gameData.words.length;
+
+        let reasonText;
+        switch (reason) {
+            case 'duplicate':
+                reasonText = `❌ **${losingPlayer.username}** said "**${word}**" which was already used!`;
+                break;
+            case 'timeout':
+                reasonText = `⏰ **${losingPlayer.username}** ran out of time!`;
+                break;
+            case 'skip':
+                reasonText = `⏭️ **${losingPlayer.username}** skipped their turn!`;
+                break;
+            default:
+                reasonText = `Game ended by ${losingPlayer.username}`;
+        }
+
+        // Determine winner (player(s) who didn't lose)
+        const winners = session.players.filter(p => p.odUserId !== losingPlayer.odUserId);
+        const winnerText = winners.length > 0 
+            ? `🏆 **${winners.map(w => w.username).join(', ')}** wins!` 
+            : '🤝 No winners this round!';
+
+        // Word contribution stats
+        const contributions = session.players
+            .map(p => `${p.username}: ${p.words || 0} words`)
+            .join('\n');
+
+        const embed = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle('📚 Word Heist - Game Over!')
+            .setDescription(`${reasonText}\n\n${winnerText}`)
+            .addFields(
+                { name: 'Category', value: session.gameData.category, inline: true },
+                { name: 'Total Words', value: `${totalWords}`, inline: true },
+                { name: 'Time Played', value: `${timePlayed}s`, inline: true },
+                { name: 'Contributions', value: contributions || 'None' },
+                { name: 'All Words', value: session.gameData.words.slice(0, 20).join(', ') || 'None' }
+            )
+            .setTimestamp();
+
+        await message.edit({ embeds: [embed], components: [] });
+
+        // Save results
+        for (const winner of winners) {
+            await this.saveGameResult(session, winner.odUserId, winner.username, winner.words || 0, true);
+        }
+        await this.saveGameResult(session, losingPlayer.odUserId, losingPlayer.username, losingPlayer.words || 0, false);
+
+        // Check for word wizard achievement (50+ words contributed)
+        for (const player of session.players) {
+            const stats = await UserGameStats.findOne({ guildId: session.guildId, odUserId: player.odUserId });
+            const totalWordContributions = (stats?.gameStats?.wordheist?.totalWords || 0) + (player.words || 0);
+            
+            await UserGameStats.findOneAndUpdate(
+                { guildId: session.guildId, odUserId: player.odUserId },
+                { $inc: { 'gameStats.wordheist.totalWords': player.words || 0 } },
+                { upsert: true }
+            );
+
+            if (totalWordContributions >= 50) {
+                await this.grantAchievement(session.guildId, player.odUserId, 'word_wizard');
+            }
+        }
+
+        const guild = await message.client.guilds.fetch(session.guildId);
+        await this.postToGameResults(guild, embed);
+    }
+
+    async handleWordHeistSkip(interaction, session) {
+        const player = session.players.find(p => p.odUserId === interaction.user.id);
+        if (!player) {
+            return interaction.reply({ content: 'You\'re not in this game!', ephemeral: true });
+        }
+        
+        const currentPlayer = session.players[session.gameData.currentTurn % session.players.length];
+        if (interaction.user.id !== currentPlayer.odUserId) {
+            return interaction.reply({ content: 'It\'s not your turn!', ephemeral: true });
+        }
+
+        await interaction.deferUpdate();
+        await this.endWordHeist(interaction.message, session, player, 'skip');
+    }
+
+    // ===========================================
     // GAME 6: CHAOS VOTE
     // ===========================================
 
@@ -782,6 +1226,7 @@ class GameHandler {
         const gameId = this.generateGameId();
         
         const questions = [
+            // Original questions
             "Who would survive a zombie apocalypse?",
             "Who would be the worst at keeping a secret?",
             "Who's most likely to become famous?",
@@ -789,7 +1234,112 @@ class GameHandler {
             "Who's the biggest snack hoarder?",
             "Who would forget their own birthday?",
             "Who's the biggest drama queen?",
-            "Who would accidentally start a cult?"
+            "Who would accidentally start a cult?",
+            // Fun/Social
+            "Who's most likely to become a millionaire?",
+            "Who would cry during a Disney movie?",
+            "Who talks the most trash in games?",
+            "Who's the worst liar here?",
+            "Who would survive longest on a deserted island?",
+            "Who's most likely to go viral on TikTok?",
+            "Who has the messiest room?",
+            "Who would win a dance battle?",
+            "Who takes the longest to get ready?",
+            "Who's the biggest simp?",
+            "Who would be the first to die in a horror movie?",
+            "Who's the most likely to start an argument?",
+            "Who's secretly the smartest?",
+            "Who would be the best superhero?",
+            "Who's the worst cook?",
+            "Who would survive a night in a haunted house?",
+            "Who's most likely to win the lottery and lose the ticket?",
+            // Personality
+            "Who has the best taste in music?",
+            "Who would be the worst roommate?",
+            "Who talks to their pets/plants?",
+            "Who would forget their wedding anniversary?",
+            "Who's the biggest procrastinator?",
+            "Who has the wildest search history?",
+            "Who would survive the hunger games?",
+            "Who's most likely to get famous for something embarrassing?",
+            "Who would be the best stand-up comedian?",
+            "Who's the biggest night owl?",
+            "Who would win a staring contest?",
+            "Who's most likely to sleep through an alarm?",
+            "Who would make the best villain?",
+            "Who's the most competitive?",
+            "Who would forget their own phone number?",
+            // Skills/Abilities
+            "Who would win at trivia night?",
+            "Who's the best at giving advice?",
+            "Who would be the worst at karaoke?",
+            "Who's most likely to become a YouTuber?",
+            "Who would survive longest without WiFi?",
+            "Who's the best at keeping a straight face?",
+            "Who would be the best secret agent?",
+            "Who's most likely to talk their way out of trouble?",
+            "Who would win a rap battle?",
+            "Who's the most photogenic?",
+            "Who would be the worst at camping?",
+            "Who's most likely to cry at a wedding?",
+            "Who would win a spelling bee?",
+            "Who's the best at giving gifts?",
+            "Who would be caught talking to themselves?",
+            // Future predictions
+            "Who will still be single in 10 years?",
+            "Who will have the most kids?",
+            "Who will become a crazy cat/dog person?",
+            "Who will be the first to move to another country?",
+            "Who will write a book someday?",
+            "Who will become a CEO?",
+            "Who will have the most interesting life story?",
+            "Who will live the longest?",
+            "Who will invent something?",
+            "Who will end up on reality TV?",
+            // Gaming specific
+            "Who rages the most when gaming?",
+            "Who's the biggest try-hard?",
+            "Who blames lag for everything?",
+            "Who would sacrifice a teammate to win?",
+            "Who's the best at button mashing?",
+            "Who has the worst internet?",
+            "Who's most likely to throw a controller?",
+            "Who talks the most in voice chat?",
+            "Who goes AFK at the worst times?",
+            "Who would betray the group first?",
+            // Embarrassing
+            "Who would trip on a flat surface?",
+            "Who's most likely to send a text to the wrong person?",
+            "Who would wave back at someone who wasn't waving at them?",
+            "Who's most likely to walk into a glass door?",
+            "Who would accidentally call their teacher 'mom'?",
+            "Who's most likely to forget someone's name mid-conversation?",
+            "Who would laugh at the wrong moment?",
+            "Who's most likely to get caught singing in public?",
+            "Who would fall asleep in a meeting?",
+            "Who's most likely to spill food on themselves?",
+            // Random chaos
+            "Who would befriend an alien?",
+            "Who's most likely to join a circus?",
+            "Who would win a hot dog eating contest?",
+            "Who's most likely to become a meme?",
+            "Who would try to pet a wild animal?",
+            "Who's most likely to get lost in their own neighborhood?",
+            "Who would accidentally commit a crime?",
+            "Who's most likely to believe a conspiracy theory?",
+            "Who would bring a knife to a gunfight?",
+            "Who's most likely to survive on $1 for a week?",
+            // More questions
+            "Who would be the best reality TV show host?",
+            "Who would get arrested first?",
+            "Who has the most embarrassing guilty pleasure?",
+            "Who would panic in an emergency?",
+            "Who gives the worst directions?",
+            "Who would become a hermit?",
+            "Who's the most oblivious?",
+            "Who would be the worst babysitter?",
+            "Who takes the worst photos?",
+            "Who would win an eating contest?"
         ];
 
         const session = {
@@ -1654,6 +2204,8 @@ class GameHandler {
             case 'buttonpanic': return this.runButtonPanic(interaction, session);
             case 'dueldraw': return this.runDuelDraw(interaction, session);
             case 'logicgrid': return this.runLogicGrid(interaction, session);
+            case 'bluff': return this.runBluffOrBust(interaction, session);
+            case 'wordheist': return this.runWordHeist(interaction, session);
             default: return interaction.reply({ content: 'Unknown game type.', ephemeral: true });
         }
     }
@@ -1681,35 +2233,50 @@ class GameHandler {
     }
 
     async saveGameResult(session, odUserId, username, score, isWinner) {
-        // Save individual result
-        await GameResult.create({
-            guildId: session.guildId,
-            gameId: session.gameId,
-            gameType: session.type,
-            odUserId,
-            username,
-            score,
-            isWinner,
-            timestamp: new Date()
-        });
+        try {
+            // Validate userId
+            if (!odUserId || odUserId === 'null' || odUserId === null) {
+                console.error('ERROR: saveGameResult called with null userId');
+                return;
+            }
 
-        // Update user stats
-        await UserGameStats.findOneAndUpdate(
-            { guildId: session.guildId, odUserId },
-            {
-                $inc: {
-                    totalGamesPlayed: 1,
-                    totalWins: isWinner ? 1 : 0,
-                    [`gameStats.${session.type}.played`]: 1,
-                    [`gameStats.${session.type}.wins`]: isWinner ? 1 : 0
+            // Save individual result
+            await GameResult.create({
+                guildId: session.guildId,
+                gameId: session.gameId,
+                gameType: session.type,
+                odUserId,
+                username,
+                score,
+                isWinner,
+                timestamp: new Date()
+            });
+
+            // Update user stats
+            await UserGameStats.findOneAndUpdate(
+                { guildId: session.guildId, odUserId },
+                {
+                    $inc: {
+                        totalGamesPlayed: 1,
+                        totalWins: isWinner ? 1 : 0,
+                        [`gameStats.${session.type}.played`]: 1,
+                        [`gameStats.${session.type}.wins`]: isWinner ? 1 : 0
+                    },
+                    $set: { updatedAt: new Date() }
                 },
-                $set: { updatedAt: new Date() }
-            },
-            { upsert: true }
-        );
+                { upsert: true }
+            );
 
-        // Update leaderboard
-        await this.updateLeaderboard(session.guildId, odUserId, username, session.type, score, isWinner);
+            // Update leaderboard
+            await this.updateLeaderboard(session.guildId, odUserId, username, session.type, score, isWinner);
+        } catch (err) {
+            if (err.code === 11000) {
+                // Duplicate key error - expected in race conditions, just log it
+                console.log(`[Games] Race condition in saveGameResult for user ${odUserId}, game ${session.type}`);
+            } else {
+                console.error('Error in saveGameResult:', err.message);
+            }
+        }
     }
 
     async saveDailyResult(guildId, odUserId, date, score) {
@@ -1733,31 +2300,54 @@ class GameHandler {
     }
 
     async updateLeaderboard(guildId, odUserId, username, gameType, score, isWinner) {
+        // Ensure odUserId is never null - this was causing duplicate key errors
+        if (!odUserId || odUserId === 'null' || odUserId === null) {
+            console.error('ERROR: updateLeaderboard called with null userId. Skipping to prevent duplicate key error.');
+            return;
+        }
+
         const today = new Date();
         const periodKey = today.toISOString().split('T')[0];
         const weekKey = `${today.getFullYear()}-W${Math.ceil(today.getDate() / 7)}`;
 
-        // Update daily leaderboard
-        await LeaderboardEntry.findOneAndUpdate(
-            { guildId, odUserId, gameType, period: 'daily', periodKey },
-            {
-                $set: { username, updatedAt: new Date() },
-                $inc: { gamesPlayed: 1, wins: isWinner ? 1 : 0 },
-                $min: { bestScore: score }
-            },
-            { upsert: true }
-        );
+        try {
+            // Update daily leaderboard - with proper error handling for duplicate keys
+            await LeaderboardEntry.findOneAndUpdate(
+                { guildId, odUserId, gameType, period: 'daily', periodKey },
+                {
+                    $set: { username, updatedAt: new Date() },
+                    $inc: { gamesPlayed: 1, wins: isWinner ? 1 : 0 },
+                    $min: { bestScore: score }
+                },
+                { upsert: true }
+            ).catch(err => {
+                // If duplicate key error, it means another operation was faster. That's OK - just skip.
+                if (err.code === 11000) {
+                    console.log(`[Games] Leaderboard race condition (expected), skipping update for ${odUserId} in ${gameType}`);
+                } else {
+                    throw err;
+                }
+            });
 
-        // Update all-time leaderboard
-        await LeaderboardEntry.findOneAndUpdate(
-            { guildId, odUserId, gameType, period: 'alltime' },
-            {
-                $set: { username, updatedAt: new Date() },
-                $inc: { gamesPlayed: 1, wins: isWinner ? 1 : 0 },
-                $min: { bestScore: score }
-            },
-            { upsert: true }
-        );
+            // Update all-time leaderboard
+            await LeaderboardEntry.findOneAndUpdate(
+                { guildId, odUserId, gameType, period: 'alltime' },
+                {
+                    $set: { username, updatedAt: new Date() },
+                    $inc: { gamesPlayed: 1, wins: isWinner ? 1 : 0 },
+                    $min: { bestScore: score }
+                },
+                { upsert: true }
+            ).catch(err => {
+                if (err.code === 11000) {
+                    console.log(`[Games] Leaderboard race condition (expected), skipping update for ${odUserId}`);
+                } else {
+                    throw err;
+                }
+            });
+        } catch (err) {
+            console.error(`Failed to update leaderboard for user ${odUserId}:`, err.message);
+        }
     }
 
     async grantAchievement(guildId, odUserId, achievementId) {

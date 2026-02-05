@@ -1,5 +1,6 @@
 const axios = require('axios');
-const { BarryMemory, UserMemory, ServerSettings } = require('./models');
+const crypto = require('crypto');
+const { BarryMemory, UserMemory, ServerSettings, AIPromptCache } = require('./models');
 
 /**
  * PersonalityHandler - Barry's AI Layer (Layer 2)
@@ -10,6 +11,7 @@ const { BarryMemory, UserMemory, ServerSettings } = require('./models');
  * - Punishment explanations
  * - Rule explanations
  * - Memory-influenced conversations
+ * - AI Response Caching to save tokens
  */
 class PersonalityHandler {
     constructor() {
@@ -17,18 +19,16 @@ class PersonalityHandler {
         this.lastResponseTime = new Map();
         this.cooldownPeriod = 10000; // 10 seconds between responses per user
         
-        // AI Model configuration - Multiple free models for fallback (Updated Feb 2026)
-        // Using models from different providers to spread rate limits
+        // AI Model configuration - Use only working free models (Updated Jun 2025)
         this.freeModels = [
-            'google/gemma-2-9b-it:free',
-            'microsoft/phi-3-mini-128k-instruct:free',
-            'microsoft/phi-3-medium-128k-instruct:free',
-            'huggingfaceh4/zephyr-7b-beta:free',
-            'openchat/openchat-7b:free',
-            'nousresearch/nous-capybara-7b:free',
-            'mistralai/mistral-7b-instruct:free',
-            'meta-llama/llama-3.2-3b-instruct:free',
-            'google/gemma-3-4b-it:free'
+            'deepseek/deepseek-chat-v3-0324:free',           // DeepSeek V3
+            'qwen/qwen3-next-80b-a3b:free',                  // Qwen3 Next 80B
+            'nvidia/llama-3.1-nemotron-70b-instruct:free',   // NVIDIA Nemotron
+            'mistralai/devstral-small:free',                 // Devstral 2
+            'step/step-3.5-flash:free',                      // StepFun Step 3.5 Flash
+            'liquid/lfm2.5-1.2b-thinking:free',              // LiquidAI LFM2.5
+            'microsoft/phi-4:free',                          // Microsoft Phi-4
+            'meta-llama/llama-3.3-70b-instruct:free'         // Meta Llama 3.3
         ];
         this.currentModelIndex = 0;
         this.aiModel = this.freeModels[0];
@@ -49,6 +49,61 @@ class PersonalityHandler {
             "I heard you, just collecting my thoughts. It's been a day.",
             "Give me a moment, I'm running on Tim Hortons coffee fumes."
         ];
+    }
+
+    /**
+     * Generate a hash of the prompt for caching
+     */
+    generatePromptHash(content) {
+        return crypto.createHash('md5').update(content).digest('hex');
+    }
+
+    /**
+     * Check cache for existing response
+     */
+    async getCachedResponse(userId, guildId, messageContent) {
+        try {
+            const promptHash = this.generatePromptHash(messageContent);
+            const cached = await AIPromptCache.findOne({
+                userId,
+                guildId,
+                promptHash
+            });
+            
+            if (cached) {
+                console.log(`[AI Cache HIT] Using cached response for user ${userId}`);
+                return cached.response;
+            }
+            return null;
+        } catch (err) {
+            console.error('Cache lookup error:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Save response to cache
+     */
+    async cacheResponse(userId, guildId, messageContent, response) {
+        try {
+            const promptHash = this.generatePromptHash(messageContent);
+            await AIPromptCache.findOneAndUpdate(
+                { userId, guildId, promptHash },
+                {
+                    userId,
+                    guildId,
+                    promptHash,
+                    originalPrompt: messageContent,
+                    response,
+                    model: this.aiModel,
+                    createdAt: new Date()
+                },
+                { upsert: true }
+            );
+        } catch (err) {
+            console.error('Cache save error:', err);
+            // Don't fail if cache save fails - just log it
+        }
     }
 
     // Switch to next available model (skipping rate-limited ones)
@@ -144,8 +199,16 @@ class PersonalityHandler {
             }
         }
 
+        // CHECK CACHE FIRST - Save API calls!
+        const guildId = message.guild?.id;
+        const cachedResponse = await this.getCachedResponse(userId, guildId, message.content);
+        if (cachedResponse) {
+            this.lastResponseTime.set(userId, now);
+            return cachedResponse;
+        }
+
         // Get user memory for context
-        const userMemory = await this.getUserMemory(userId, message.guild?.id);
+        const userMemory = await this.getUserMemory(userId, guildId);
         
         // Compose the AI prompt
         const prompt = this.composePrompt(message, context, channelType, userProfile, userMemory, isMod, timeOfDay, maturity, personality);
@@ -206,6 +269,9 @@ class PersonalityHandler {
 
         // Update user memory with this interaction
         await this.updateUserInteraction(userId, message.guild?.id, message.content, aiReply);
+
+        // CACHE THE RESPONSE FOR FUTURE USE - Saves tokens!
+        await this.cacheResponse(userId, guildId, message.content, aiReply);
 
         return aiReply;
     }
