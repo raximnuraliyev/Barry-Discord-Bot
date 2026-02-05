@@ -580,31 +580,7 @@ class CommandHandler {
                 .setName('daily')
                 .setDescription('Play today\'s daily challenge'),
 
-            new SlashCommandBuilder()
-                .setName('leaderboard')
-                .setDescription('View game leaderboards')
-                .addStringOption(option =>
-                    option.setName('game')
-                        .setDescription('Game type (or all)')
-                        .setRequired(false)
-                        .addChoices(
-                            { name: 'All Games', value: 'all' },
-                            { name: 'Reflex Roulette', value: 'reflex' },
-                            { name: 'Time Trap', value: 'timetrap' },
-                            { name: 'Duel Draw', value: 'dueldraw' },
-                            { name: 'Daily Challenges', value: 'daily' }
-                        )
-                )
-                .addStringOption(option =>
-                    option.setName('period')
-                        .setDescription('Time period')
-                        .setRequired(false)
-                        .addChoices(
-                            { name: 'All Time', value: 'alltime' },
-                            { name: 'This Week', value: 'weekly' },
-                            { name: 'Today', value: 'daily' }
-                        )
-                ),
+            // Removed /leaderboard - use /ranks instead
 
             new SlashCommandBuilder()
                 .setName('achievements')
@@ -771,7 +747,7 @@ class CommandHandler {
                 case 'game': return await this.handleGame(interaction);
                 case 'duel': return await this.handleDuel(interaction);
                 case 'daily': return await this.handleDaily(interaction);
-                case 'leaderboard': return await this.handleLeaderboard(interaction);
+                // leaderboard removed - use /ranks
                 case 'achievements': return await this.handleAchievements(interaction);
                 case 'gamestats': return await this.handleGameStats(interaction);
                 case 'rank': return await this.handleRank(interaction);
@@ -916,6 +892,9 @@ class CommandHandler {
     // ===========================================
 
     async handleWarn(interaction) {
+        // Defer immediately to avoid timeout
+        await interaction.deferReply();
+        
         const user = interaction.options.getUser('user');
         const reason = interaction.options.getString('reason');
         
@@ -937,10 +916,12 @@ class CommandHandler {
             )
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     async handleUnwarn(interaction) {
+        await interaction.deferReply();
+        
         const user = interaction.options.getUser('user');
         const caseId = interaction.options.getString('case');
         const reason = interaction.options.getString('reason');
@@ -959,17 +940,19 @@ class CommandHandler {
             .setDescription(`Removed warning case #${caseId} from ${user.tag}`)
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     async handleMute(interaction) {
+        await interaction.deferReply();
+        
         const user = interaction.options.getUser('user');
         const duration = interaction.options.getInteger('duration') * 60 * 1000;
         const reason = interaction.options.getString('reason');
         const member = interaction.guild.members.cache.get(user.id);
 
         if (!member) {
-            return await interaction.reply({ content: 'User not found in server.', ephemeral: true });
+            return await interaction.editReply({ content: 'User not found in server.' });
         }
 
         const result = await this.moderation.manualMute(
@@ -991,7 +974,7 @@ class CommandHandler {
             )
             .setTimestamp();
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     async handleUnmute(interaction) {
@@ -2413,12 +2396,23 @@ class CommandHandler {
             const endIdx = startIdx + perPage;
             const pageStats = allStats.slice(startIdx, endIdx);
 
-            // Build rankings display
+            // Build rankings display - fetch usernames from Discord if not in DB
             let rankingsText = '';
             for (let i = 0; i < pageStats.length; i++) {
                 const rank = startIdx + i + 1;
                 const stat = pageStats[i];
-                const username = stat.username || `User ${stat.odUserId?.slice(-4) || '????'}`;
+                let username = stat.username;
+                
+                // If no username stored, try to fetch from Discord
+                if (!username || username.startsWith('User ')) {
+                    try {
+                        const user = await interaction.client.users.fetch(stat.odUserId);
+                        username = user.username;
+                    } catch {
+                        username = `User ${stat.odUserId?.slice(-4) || '????'}`;
+                    }
+                }
+                
                 const wins = gameFilter === 'all' ? stat.totalWins : stat.wins;
                 const games = gameFilter === 'all' ? stat.totalGamesPlayed : stat.gamesPlayed;
                 const winRate = games > 0 ? Math.round((wins / games) * 100) : 0;
@@ -2506,7 +2500,18 @@ class CommandHandler {
             for (let i = 0; i < pageStats.length; i++) {
                 const rank = startIdx + i + 1;
                 const stat = pageStats[i];
-                const username = stat.username || `User ${stat.odUserId?.slice(-4) || '????'}`;
+                let username = stat.username;
+                
+                // If no username stored, try to fetch from Discord
+                if (!username || username.startsWith('User ')) {
+                    try {
+                        const user = await interaction.client.users.fetch(stat.odUserId);
+                        username = user.username;
+                    } catch {
+                        username = `User ${stat.odUserId?.slice(-4) || '????'}`;
+                    }
+                }
+                
                 const wins = gameFilter === 'all' ? stat.totalWins : stat.wins;
                 const games = gameFilter === 'all' ? stat.totalGamesPlayed : stat.gamesPlayed;
                 const winRate = games > 0 ? Math.round((wins / games) * 100) : 0;
@@ -2629,6 +2634,10 @@ class CommandHandler {
                 const votedFor = parts[2];
                 const session = this.games.activeSessions.get(gameId);
                 if (session) {
+                    // Prevent self-voting
+                    if (votedFor === interaction.user.id) {
+                        return await interaction.reply({ content: '❌ You cannot vote for yourself!', ephemeral: true });
+                    }
                     session.gameData.votes[interaction.user.id] = votedFor;
                     this.games.activeSessions.set(gameId, session);
                     return await interaction.reply({ content: '✅ Vote recorded!', ephemeral: true });

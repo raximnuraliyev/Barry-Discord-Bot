@@ -40,18 +40,136 @@ class DatabaseHandler {
         if (this.badWordsCache) return this.badWordsCache;
         
         try {
-            const response = await axios.get(BAD_WORDS_URL, { timeout: 10000 });
+            const response = await axios.get(BAD_WORDS_URL, { 
+                timeout: 15000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
             const text = response.data;
+            
+            // Check if we got HTML instead of text (some URLs redirect)
+            if (typeof text === 'string' && text.includes('<!DOCTYPE') || text.includes('<html')) {
+                console.error('Bad words URL returned HTML, using fallback');
+                throw new Error('HTML response instead of text');
+            }
+            
             const words = text.split('\n')
                 .map(w => w.trim().toLowerCase())
-                .filter(w => w.length > 0 && !w.startsWith('#'));
+                .filter(w => w.length > 0 && !w.startsWith('#') && w.length < 30);
+            
             this.badWordsCache = words;
             console.log(`Loaded ${words.length} bad words from URL`);
             return words;
         } catch (error) {
             console.error('Error fetching bad words list:', error.message);
-            // Return fallback list
-            return ['fuck', 'shit', 'bitch', 'ass', 'dick', 'cock', 'pussy', 'damn', 'crap', 'hell'];
+            // Return expanded fallback list with ~200 words
+            this.badWordsCache = [
+                // High severity slurs (censored/abbreviated for safety)
+                'fuck', 'fucking', 'fucked', 'fucker', 'motherfucker', 'motherfucking',
+                'shit', 'shitty', 'bullshit', 'shitting', 'shithead', 'dipshit',
+                'bitch', 'bitchy', 'bitches', 'bitching', 'sonofabitch',
+                'ass', 'asshole', 'asses', 'dumbass', 'fatass', 'jackass', 'smartass',
+                'dick', 'dickhead', 'dicks',
+                'cock', 'cocks', 'cocksucker',
+                'pussy', 'pussies',
+                'damn', 'goddamn', 'damnit',
+                'crap', 'crappy',
+                'hell', 'hellish',
+                'bastard', 'bastards',
+                'piss', 'pissed', 'pissing',
+                'cunt', 'cunts',
+                'whore', 'whores', 'whorish',
+                'slut', 'sluts', 'slutty',
+                'retard', 'retarded', 'retards',
+                'idiot', 'idiots', 'idiotic',
+                'moron', 'morons', 'moronic',
+                'dumb', 'dumbass',
+                'stupid', 'stupidity',
+                'loser', 'losers',
+                'jerk', 'jerks',
+                'douche', 'douchebag', 'douches',
+                'twat', 'twats',
+                'wanker', 'wankers',
+                'prick', 'pricks',
+                'arse', 'arsehole',
+                'bollocks',
+                'bugger',
+                'bloody',
+                'sod',
+                'tit', 'tits', 'titty',
+                'boob', 'boobs', 'booby',
+                'penis', 'penises',
+                'vagina', 'vaginas',
+                'sex', 'sexy', 'sexual', 'sexually',
+                'porn', 'porno', 'pornography',
+                'nude', 'nudes', 'nudity',
+                'naked',
+                'horny',
+                'orgasm',
+                'masturbate', 'masturbation',
+                'erection',
+                'ejaculate', 'ejaculation',
+                'cum', 'cumming', 'cumshot',
+                'dildo', 'dildos',
+                'vibrator',
+                'blowjob', 'blowjobs',
+                'handjob',
+                'anal',
+                'oral',
+                'genital', 'genitals',
+                'scrotum',
+                'testicle', 'testicles',
+                'breast', 'breasts',
+                'nipple', 'nipples',
+                'areola',
+                'clitoris',
+                'labia',
+                'hymen',
+                'phallus',
+                'vulva',
+                'sperm',
+                'semen',
+                'ovary', 'ovaries',
+                'uterus',
+                'fetus', 'foetus',
+                'abortion',
+                'rape', 'raped', 'rapist', 'raping',
+                'molest', 'molested', 'molester', 'molesting',
+                'pedophile', 'paedophile', 'pedo', 'paedo',
+                'incest',
+                'necrophilia',
+                'bestiality',
+                'zoophilia',
+                'drug', 'drugs',
+                'cocaine', 'coke',
+                'heroin',
+                'meth', 'methamphetamine',
+                'marijuana', 'weed', 'pot', 'cannabis',
+                'lsd', 'acid',
+                'ecstasy', 'mdma', 'molly',
+                'ketamine',
+                'crack',
+                'overdose',
+                'suicide', 'suicidal',
+                'kill', 'killing', 'killer',
+                'murder', 'murdered', 'murderer',
+                'die', 'dying', 'death',
+                'bomb', 'bombing',
+                'terror', 'terrorist', 'terrorism',
+                'hate', 'hating', 'hatred', 'hater',
+                'racist', 'racism',
+                'sexist', 'sexism',
+                'homophobe', 'homophobic', 'homophobia',
+                'nazi', 'nazis',
+                'fascist', 'fascism',
+                'genocide',
+                'holocaust',
+                'slavery', 'slave',
+                'torture', 'tortured'
+            ];
+            console.log(`Using fallback list of ${this.badWordsCache.length} bad words`);
+            return this.badWordsCache;
         }
     }
 

@@ -305,7 +305,20 @@ class GameHandler {
             .setFooter({ text: '🏆 /rank to see your ranking • /ranks for leaderboard' })
             .setTimestamp();
 
-        await interaction.update({ embeds: [embed], components: [] });
+        // Use deferUpdate + message.edit to avoid double acknowledgment
+        try {
+            await interaction.deferUpdate();
+        } catch (e) {
+            // Interaction may already be deferred/acknowledged
+        }
+        try {
+            await interaction.message.edit({ embeds: [embed], components: [] });
+        } catch (e) {
+            // Fallback: fetch channel and message
+            const channel = await interaction.client.channels.fetch(session.channelId);
+            const msg = await channel.messages.fetch(session.messageId);
+            await msg.edit({ embeds: [embed], components: [] });
+        }
 
         // Save result and check achievements
         await this.saveGameResult(session, winner.id, winner.username, reactionTime, true);
@@ -457,6 +470,11 @@ class GameHandler {
             return await interaction.reply({ content: 'You\'re not in this game!', ephemeral: true });
         }
 
+        // Check if this player already completed their input
+        if (session.gameData.completedPlayers && session.gameData.completedPlayers.includes(userId)) {
+            return await interaction.reply({ content: 'You already submitted your answer! Wait for other players.', ephemeral: true });
+        }
+
         // Initialize player input array
         if (!session.gameData.playerInputs[userId]) {
             session.gameData.playerInputs[userId] = [];
@@ -472,25 +490,11 @@ class GameHandler {
 
         // Check if input is complete
         if (currentInput.length < expectedLength) {
-            // Still inputting - update the embed
-            const inputEmbed = new EmbedBuilder()
-                .setColor(0xF1C40F)
-                .setTitle(`🧠 Mind Lock - Round ${session.round}`)
-                .setDescription(`**Now recreate the pattern!**\n\nSequence length: ${expectedLength}\nYour input: ${inputStr}`)
-                .setFooter({ text: `${currentInput.length}/${expectedLength} - Keep going!` });
-
-            // Use deferUpdate + editReply for reliability
-            try {
-                await interaction.deferUpdate();
-                await interaction.message.edit({ embeds: [inputEmbed] });
-            } catch (e) {
-                // Fallback: fetch and edit message directly
-                try {
-                    const channel = await interaction.client.channels.fetch(session.channelId);
-                    const msg = await channel.messages.fetch(session.messageId);
-                    await msg.edit({ embeds: [inputEmbed] });
-                } catch {}
-            }
+            // Still inputting - show progress ONLY to this player (ephemeral)
+            await interaction.reply({ 
+                content: `**Your input:** ${inputStr}\n**Progress:** ${currentInput.length}/${expectedLength} - Keep going!`, 
+                ephemeral: true 
+            });
             this.activeSessions.set(session.gameId, session);
             return;
         }
@@ -499,35 +503,65 @@ class GameHandler {
         const correctSequence = session.gameData.sequence.join(' ');
         const isCorrect = inputStr === correctSequence;
 
+        // Track completion
+        if (!session.gameData.completedPlayers) session.gameData.completedPlayers = [];
+        session.gameData.completedPlayers.push(userId);
+
         if (isCorrect) {
             // Award points (longer sequences = more points)
             const points = session.round * 10;
             player.score += points;
 
-            if (session.round >= 5) {
-                // Game complete - show final scores
-                await this.endMindLock(interaction, session, true);
+            // Notify this player of their success (ephemeral)
+            await interaction.reply({ 
+                content: `✅ **Correct!** +${points} points\\nYour score: ${player.score}\\n\\n*Waiting for other players...*`, 
+                ephemeral: true 
+            });
+        } else {
+            // Notify this player of their failure (ephemeral)
+            await interaction.reply({ 
+                content: `❌ **Wrong!** The correct sequence was: ${correctSequence}\\nYour input: ${inputStr}`, 
+                ephemeral: true 
+            });
+        }
+
+        this.activeSessions.set(session.gameId, session);
+
+        // Check if all players have completed
+        const allCompleted = session.players.every(p => 
+            session.gameData.completedPlayers.includes(p.odUserId)
+        );
+
+        if (allCompleted) {
+            // Check if any player got it wrong
+            const anyWrong = session.players.some(p => {
+                const pInput = session.gameData.playerInputs[p.odUserId]?.join(' ') || '';
+                return pInput !== correctSequence;
+            });
+
+            if (anyWrong || session.round >= 5) {
+                // Game over
+                await this.endMindLock(interaction, session, !anyWrong);
             } else {
-                // Continue to next round
+                // All correct, continue to next round
                 const successEmbed = new EmbedBuilder()
                     .setColor(0x2ECC71)
                     .setTitle(`🧠 Mind Lock - Round ${session.round} Complete!`)
-                    .setDescription(`✅ **Correct!** +${points} points\n\nCurrent Score: ${player.score}`)
+                    .setDescription(`✅ **All players got it right!**\\n\\n${session.players.map(p => `${p.username}: ${p.score} pts`).join('\\n')}`)
                     .setFooter({ text: 'Next round starting...' });
 
                 try {
-                    await interaction.deferUpdate();
-                    await interaction.message.edit({ embeds: [successEmbed], components: [] });
-                } catch (e) {
-                    try {
-                        const channel = await interaction.client.channels.fetch(session.channelId);
-                        const msg = await channel.messages.fetch(session.messageId);
-                        await msg.edit({ embeds: [successEmbed], components: [] });
-                    } catch {}
-                }
+                    const channel = await interaction.client.channels.fetch(session.channelId);
+                    const msg = await channel.messages.fetch(session.messageId);
+                    await msg.edit({ embeds: [successEmbed], components: [] });
+                } catch {}
+                
+                // Reset for next round
+                session.gameData.completedPlayers = [];
+                session.gameData.playerInputs = {};
                 this.activeSessions.set(session.gameId, session);
 
-                // Wait then start next round - use channel message instead of interaction
+                // Wait then start next round
                 const channelId = session.channelId;
                 const messageId = session.messageId;
                 const client = interaction.client;
@@ -537,7 +571,6 @@ class GameHandler {
                         if (this.activeSessions.has(session.gameId)) {
                             const channel = await client.channels.fetch(channelId);
                             const msg = await channel.messages.fetch(messageId);
-                            // Pass a mock interaction with the message for editing
                             await this.runMindLockRound({ message: msg, channel, client }, session);
                         }
                     } catch (err) {
@@ -545,9 +578,6 @@ class GameHandler {
                     }
                 }, 2000);
             }
-        } else {
-            // Game over - wrong sequence
-            await this.endMindLock(interaction, session, false);
         }
     }
 
@@ -681,14 +711,17 @@ class GameHandler {
         const embed = new EmbedBuilder()
             .setColor(0xE74C3C)
             .setTitle(`🎭 Bluff or Bust - Round ${session.round}`)
-            .setDescription(`**Question:** ${question}\n\n📝 *Check your DMs to submit your answer!*\n\n⏰ You have 60 seconds.`)
+            .setDescription(`**Question:** ${question}\n\n📝 *Check your DMs to submit your answer!*\n\n⚠️ **Make sure you can receive DMs from server members!**\n(Server Settings → Privacy → Allow DMs)\n\n⏰ You have 60 seconds.`)
             .addFields({ name: 'Players', value: session.players.map(p => `${p.odUserId === session.gameData.fakeAuthor ? '🎭' : '✍️'} ${p.username}`).join('\n') })
             .setFooter({ text: `Game ID: ${session.gameId}` });
 
         await interaction.update({ embeds: [embed], components: [] });
 
-        // DM each player for their answer
-        for (const player of session.players) {
+        // Track DM failures
+        const dmFailures = [];
+
+        // DM each player for their answer - run in parallel for speed
+        const dmPromises = session.players.map(async (player) => {
             try {
                 const user = await interaction.client.users.fetch(player.odUserId);
                 const isBluffer = player.odUserId === session.gameData.fakeAuthor;
@@ -701,26 +734,55 @@ class GameHandler {
                         : '**Answer truthfully.** One player is bluffing - you\'ll have to spot them!'}`)
                     .setFooter({ text: 'Reply to this message with your answer (60 seconds)' });
 
-                const dm = await user.send({ embeds: [dmEmbed] });
+                let dm;
+                try {
+                    dm = await user.send({ embeds: [dmEmbed] });
+                } catch (dmError) {
+                    // DM failed - user has DMs disabled
+                    console.error(`Cannot DM ${player.username}: ${dmError.message}`);
+                    dmFailures.push(player.username);
+                    return;
+                }
                 
                 // Collect answer
                 const filter = m => m.author.id === player.odUserId;
-                const collected = await dm.channel.awaitMessages({ filter, max: 1, time: 60000 });
-                
-                if (collected.size > 0) {
-                    session.gameData.answers[player.odUserId] = {
-                        answer: collected.first().content,
-                        username: player.username,
-                        isBluff: isBluffer
-                    };
-                    await user.send('✅ Answer received!');
+                try {
+                    const collected = await dm.channel.awaitMessages({ filter, max: 1, time: 60000 });
+                    
+                    if (collected.size > 0) {
+                        session.gameData.answers[player.odUserId] = {
+                            answer: collected.first().content,
+                            username: player.username,
+                            isBluff: isBluffer
+                        };
+                        await user.send('✅ Answer received!');
+                    } else {
+                        await user.send('⏰ Time ran out! No answer submitted.');
+                    }
+                } catch (collectError) {
+                    console.error(`Answer collection failed for ${player.username}:`, collectError.message);
                 }
             } catch (err) {
-                console.error(`Failed to DM ${player.username}:`, err.message);
+                console.error(`Failed to process ${player.username}:`, err.message);
+                dmFailures.push(player.username);
             }
-        }
+        });
+
+        // Wait for all DM operations to complete
+        await Promise.all(dmPromises);
 
         this.activeSessions.set(session.gameId, session);
+
+        // Check if we had DM failures and notify the channel
+        if (dmFailures.length > 0) {
+            try {
+                const channel = await interaction.client.channels.fetch(session.channelId);
+                await channel.send({
+                    content: `⚠️ **Could not DM:** ${dmFailures.join(', ')}\n\nPlease enable DMs from server members to play this game!`,
+                    allowedMentions: { users: [] }
+                });
+            } catch {}
+        }
 
         // Move to voting phase
         await this.bluffVotingPhase(interaction.message, session);
@@ -1094,10 +1156,17 @@ class GameHandler {
             // Delete the message to keep chat clean
             try { await collected.first().delete(); } catch {}
 
-            // Validate word
+            // Validate word - check for duplicates
             if (session.gameData.words.includes(word)) {
                 // Duplicate! Player loses
                 await this.endWordHeist(message, session, currentPlayer, 'duplicate', word);
+                return;
+            }
+
+            // Validate word fits category (basic validation)
+            const validForCategory = this.validateWordForCategory(word, session.gameData.category);
+            if (!validForCategory) {
+                await this.endWordHeist(message, session, currentPlayer, 'invalid', word);
                 return;
             }
 
@@ -1128,6 +1197,40 @@ class GameHandler {
         }
     }
 
+    /**
+     * Validate if a word fits the given category
+     */
+    validateWordForCategory(word, category) {
+        // Lists of valid words per category (expanded)
+        const categoryWords = {
+            'Animals': ['dog', 'cat', 'lion', 'tiger', 'elephant', 'giraffe', 'zebra', 'horse', 'cow', 'pig', 'sheep', 'goat', 'chicken', 'duck', 'turkey', 'eagle', 'hawk', 'owl', 'penguin', 'dolphin', 'whale', 'shark', 'fish', 'salmon', 'tuna', 'crab', 'lobster', 'octopus', 'squid', 'snake', 'lizard', 'crocodile', 'alligator', 'turtle', 'frog', 'toad', 'bear', 'wolf', 'fox', 'deer', 'moose', 'rabbit', 'squirrel', 'mouse', 'rat', 'hamster', 'guinea', 'parrot', 'canary', 'finch', 'sparrow', 'crow', 'raven', 'pigeon', 'dove', 'seagull', 'pelican', 'flamingo', 'ostrich', 'emu', 'kangaroo', 'koala', 'platypus', 'sloth', 'monkey', 'ape', 'gorilla', 'chimpanzee', 'orangutan', 'lemur', 'panda', 'raccoon', 'skunk', 'badger', 'otter', 'beaver', 'hedgehog', 'porcupine', 'armadillo', 'bat', 'moth', 'butterfly', 'bee', 'wasp', 'ant', 'spider', 'scorpion', 'centipede', 'worm', 'snail', 'slug', 'caterpillar', 'cricket', 'grasshopper', 'dragonfly', 'firefly', 'ladybug', 'beetle', 'cockroach', 'fly', 'mosquito', 'cheetah', 'leopard', 'panther', 'jaguar', 'hyena', 'jackal', 'coyote', 'buffalo', 'bison', 'hippo', 'rhino', 'camel', 'llama', 'alpaca', 'donkey', 'mule', 'zebra', 'antelope', 'gazelle', 'ibex', 'yak'],
+            'Countries': ['usa', 'canada', 'mexico', 'brazil', 'argentina', 'chile', 'peru', 'colombia', 'venezuela', 'ecuador', 'bolivia', 'paraguay', 'uruguay', 'guyana', 'suriname', 'france', 'germany', 'italy', 'spain', 'portugal', 'uk', 'england', 'scotland', 'ireland', 'wales', 'netherlands', 'belgium', 'switzerland', 'austria', 'poland', 'czech', 'hungary', 'romania', 'bulgaria', 'greece', 'turkey', 'russia', 'ukraine', 'sweden', 'norway', 'finland', 'denmark', 'iceland', 'china', 'japan', 'korea', 'india', 'pakistan', 'bangladesh', 'indonesia', 'malaysia', 'singapore', 'thailand', 'vietnam', 'philippines', 'australia', 'newzealand', 'egypt', 'morocco', 'nigeria', 'kenya', 'ethiopia', 'tanzania', 'southafrica', 'ghana', 'senegal', 'algeria', 'tunisia', 'libya', 'sudan', 'iraq', 'iran', 'syria', 'jordan', 'israel', 'lebanon', 'saudi', 'uae', 'qatar', 'kuwait', 'oman', 'yemen', 'afghanistan', 'nepal', 'bhutan', 'srilanka', 'myanmar', 'cambodia', 'laos', 'mongolia', 'taiwan', 'hongkong'],
+            'Foods': ['pizza', 'burger', 'hotdog', 'sandwich', 'taco', 'burrito', 'sushi', 'ramen', 'pasta', 'lasagna', 'spaghetti', 'rice', 'bread', 'toast', 'cereal', 'oatmeal', 'pancake', 'waffle', 'egg', 'bacon', 'sausage', 'ham', 'steak', 'chicken', 'turkey', 'fish', 'salmon', 'tuna', 'shrimp', 'lobster', 'crab', 'salad', 'soup', 'stew', 'curry', 'chili', 'fries', 'chips', 'nachos', 'popcorn', 'pretzel', 'cookie', 'cake', 'pie', 'brownie', 'donut', 'muffin', 'croissant', 'bagel', 'biscuit', 'candy', 'chocolate', 'icecream', 'yogurt', 'cheese', 'milk', 'butter', 'cream', 'apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 'raspberry', 'cherry', 'peach', 'plum', 'pear', 'watermelon', 'melon', 'pineapple', 'mango', 'papaya', 'coconut', 'kiwi', 'lemon', 'lime', 'grapefruit', 'avocado', 'tomato', 'potato', 'carrot', 'broccoli', 'spinach', 'lettuce', 'cabbage', 'onion', 'garlic', 'pepper', 'cucumber', 'celery', 'corn', 'bean', 'pea', 'mushroom', 'olive', 'pickle'],
+            'Movies': ['avatar', 'titanic', 'inception', 'interstellar', 'gladiator', 'matrix', 'godfather', 'jaws', 'psycho', 'alien', 'terminator', 'predator', 'rambo', 'rocky', 'joker', 'batman', 'superman', 'spiderman', 'ironman', 'hulk', 'thor', 'avengers', 'frozen', 'moana', 'coco', 'up', 'cars', 'shrek', 'minions', 'toy', 'nemo', 'dory', 'ratatouille', 'walle', 'brave', 'tangled', 'mulan', 'lion', 'aladdin', 'pocahontas', 'hercules', 'tarzan', 'bambi', 'dumbo', 'pinocchio', 'cinderella', 'sleeping', 'snow', 'beauty', 'beast', 'mermaid', 'jungle', 'aristocats', 'rango', 'madagascar', 'happy', 'penguins', 'apes', 'godzilla', 'kong', 'jurassic', 'dinosaur', 'jojo', 'bohemian', 'rocketman', 'sing', 'grease', 'mamma', 'musical', 'greatest', 'showman', 'lalaland', 'whiplash', 'moonlight', 'spotlight', 'argo', 'gravity', 'revenant', 'parasite', 'nomadland', 'minari', 'driver'],
+            'Sports': ['soccer', 'football', 'basketball', 'baseball', 'hockey', 'tennis', 'golf', 'swimming', 'running', 'cycling', 'boxing', 'wrestling', 'mma', 'judo', 'karate', 'taekwondo', 'fencing', 'archery', 'shooting', 'skiing', 'snowboard', 'skating', 'gymnastics', 'diving', 'surfing', 'volleyball', 'badminton', 'table', 'cricket', 'rugby', 'lacrosse', 'handball', 'polo', 'rowing', 'sailing', 'canoeing', 'kayaking', 'triathlon', 'marathon', 'sprint', 'hurdles', 'javelin', 'discus', 'shotput', 'hammer', 'pole', 'high', 'long', 'triple', 'decathlon', 'heptathlon', 'pentathlon', 'biathlon', 'bobsled', 'luge', 'skeleton', 'curling', 'equestrian', 'dressage', 'showjumping', 'eventing', 'weightlifting', 'powerlifting', 'crossfit', 'bodybuilding', 'climbing', 'bouldering', 'rappelling', 'hiking', 'camping', 'fishing', 'hunting', 'darts', 'billiards', 'pool', 'snooker', 'bowling', 'cheerleading', 'dance', 'yoga', 'pilates', 'aerobics', 'zumba'],
+            'Colors': ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'black', 'white', 'gray', 'grey', 'silver', 'gold', 'bronze', 'copper', 'navy', 'teal', 'cyan', 'aqua', 'turquoise', 'indigo', 'violet', 'lavender', 'lilac', 'magenta', 'fuchsia', 'maroon', 'burgundy', 'crimson', 'scarlet', 'coral', 'salmon', 'peach', 'apricot', 'amber', 'mustard', 'lemon', 'lime', 'olive', 'chartreuse', 'mint', 'sage', 'forest', 'emerald', 'jade', 'khaki', 'tan', 'beige', 'cream', 'ivory', 'pearl', 'champagne', 'rose', 'blush', 'mauve', 'plum', 'eggplant', 'wine', 'ruby', 'garnet', 'sapphire', 'cobalt', 'azure', 'cerulean', 'periwinkle', 'slate', 'charcoal', 'ebony', 'onyx', 'jet'],
+            'Professions': ['doctor', 'nurse', 'surgeon', 'dentist', 'pharmacist', 'therapist', 'psychologist', 'psychiatrist', 'veterinarian', 'lawyer', 'judge', 'paralegal', 'teacher', 'professor', 'principal', 'counselor', 'librarian', 'engineer', 'architect', 'scientist', 'researcher', 'chemist', 'physicist', 'biologist', 'geologist', 'astronomer', 'mathematician', 'programmer', 'developer', 'designer', 'artist', 'painter', 'sculptor', 'photographer', 'filmmaker', 'director', 'producer', 'actor', 'singer', 'musician', 'composer', 'conductor', 'dancer', 'choreographer', 'writer', 'author', 'journalist', 'reporter', 'editor', 'publisher', 'accountant', 'banker', 'economist', 'analyst', 'consultant', 'manager', 'executive', 'entrepreneur', 'salesperson', 'marketer', 'advertiser', 'realtor', 'broker', 'chef', 'baker', 'butcher', 'waiter', 'bartender', 'barista', 'pilot', 'flight', 'mechanic', 'electrician', 'plumber', 'carpenter', 'mason', 'roofer', 'painter', 'welder', 'machinist', 'firefighter', 'police', 'detective', 'security', 'soldier', 'sailor', 'marine', 'general', 'captain', 'lieutenant', 'sergeant', 'farmer', 'rancher', 'fisherman', 'miner', 'logger', 'trucker', 'driver', 'courier'],
+            'Video Games': ['minecraft', 'fortnite', 'roblox', 'gta', 'callofduty', 'cod', 'halo', 'destiny', 'overwatch', 'valorant', 'csgo', 'counter', 'apex', 'pubg', 'battlefield', 'fifa', 'madden', 'nba', 'nhl', 'mario', 'zelda', 'pokemon', 'kirby', 'metroid', 'donkey', 'smash', 'splatoon', 'animal', 'crossing', 'sonic', 'crash', 'spyro', 'ratchet', 'clank', 'jak', 'daxter', 'sly', 'cooper', 'god', 'war', 'uncharted', 'last', 'horizon', 'spider', 'ghost', 'tsushima', 'demons', 'souls', 'dark', 'elden', 'ring', 'bloodborne', 'sekiro', 'resident', 'evil', 'silent', 'hill', 'outlast', 'amnesia', 'fallout', 'skyrim', 'elder', 'scrolls', 'witcher', 'cyberpunk', 'mass', 'effect', 'dragon', 'age', 'assassins', 'creed', 'far', 'cry', 'watch', 'dogs', 'tomb', 'raider', 'bioshock', 'borderlands', 'diablo', 'starcraft', 'warcraft', 'wow', 'hearthstone', 'league', 'legends', 'dota', 'smite', 'rocket', 'sims', 'simcity', 'civilization', 'age', 'empires', 'total', 'xcom', 'portal', 'half', 'life', 'left', 'dead', 'terraria', 'stardew', 'valley'],
+            'Music Artists': ['beatles', 'elvis', 'michael', 'jackson', 'madonna', 'prince', 'queen', 'bowie', 'stones', 'zeppelin', 'floyd', 'sabbath', 'metallica', 'nirvana', 'radiohead', 'coldplay', 'u2', 'oasis', 'blur', 'muse', 'greenday', 'blink', 'paramore', 'panic', 'disco', 'fall', 'boy', 'chemical', 'romance', 'killers', 'strokes', 'arctic', 'monkeys', 'foo', 'fighters', 'rhcp', 'peppers', 'pearl', 'jam', 'soundgarden', 'alice', 'chains', 'tool', 'deftones', 'korn', 'slipknot', 'rammstein', 'linkin', 'park', 'evanescence', 'nightwish', 'within', 'temptation', 'epica', 'kamelot', 'blind', 'guardian', 'helloween', 'iron', 'maiden', 'judas', 'priest', 'motorhead', 'ozzy', 'dio', 'megadeth', 'anthrax', 'slayer', 'pantera', 'sepultura', 'gojira', 'mastodon', 'lamb', 'god', 'behemoth', 'opeth', 'dream', 'theater', 'rush', 'yes', 'genesis', 'king', 'crimson', 'jethro', 'tull', 'emerson', 'steely', 'dan', 'eagles', 'fleetwood', 'mac', 'acdc', 'guns', 'roses', 'aerosmith', 'bon', 'jovi', 'def', 'leppard', 'motley', 'crue', 'poison', 'whitesnake', 'ratt', 'warrant', 'skid', 'row', 'cinderella', 'tesla', 'winger'],
+            'Fruits': ['apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 'raspberry', 'blackberry', 'cherry', 'peach', 'plum', 'pear', 'apricot', 'nectarine', 'watermelon', 'cantaloupe', 'honeydew', 'melon', 'pineapple', 'mango', 'papaya', 'coconut', 'kiwi', 'lemon', 'lime', 'grapefruit', 'tangerine', 'mandarin', 'clementine', 'kumquat', 'pomegranate', 'fig', 'date', 'prune', 'raisin', 'cranberry', 'gooseberry', 'elderberry', 'mulberry', 'boysenberry', 'loganberry', 'currant', 'lingonberry', 'acai', 'goji', 'lychee', 'longan', 'rambutan', 'durian', 'jackfruit', 'breadfruit', 'starfruit', 'dragonfruit', 'pitaya', 'guava', 'passion', 'fruit', 'tamarind', 'persimmon', 'quince', 'plantain', 'avocado']
+        };
+
+        const categoryKey = category;
+        const validWords = categoryWords[categoryKey];
+        
+        if (!validWords) {
+            // Unknown category, allow any single-word alphabetic input
+            return /^[a-z]+$/.test(word) && word.length >= 2;
+        }
+
+        // Check if word is in the category list (also allow partial matches for compound words)
+        return validWords.some(valid => 
+            word === valid || 
+            valid.includes(word) || 
+            word.includes(valid)
+        );
+    }
+
     async endWordHeist(message, session, losingPlayer, reason, word = null) {
         session.state = 'finished';
         this.activeSessions.delete(session.gameId);
@@ -1146,6 +1249,9 @@ class GameHandler {
                 break;
             case 'skip':
                 reasonText = `⏭️ **${losingPlayer.username}** skipped their turn!`;
+                break;
+            case 'invalid':
+                reasonText = `❌ **${losingPlayer.username}** said "**${word}**" which doesn't fit the category!`;
                 break;
             default:
                 reasonText = `Game ended by ${losingPlayer.username}`;
@@ -1859,34 +1965,82 @@ class GameHandler {
     }
 
     async handleLogicGridAnswer(interaction, session, answer) {
+        const userId = interaction.user.id;
+        const player = session.players.find(p => p.odUserId === userId);
+        if (!player) {
+            return await interaction.reply({ content: 'You\'re not in this game!', ephemeral: true });
+        }
+
+        // Track who has already answered to prevent multiple answers
+        if (!session.gameData.answered) session.gameData.answered = {};
+        if (session.gameData.answered[userId]) {
+            return await interaction.reply({ content: 'You already answered!', ephemeral: true });
+        }
+        session.gameData.answered[userId] = parseInt(answer);
+
         const puzzle = session.gameData;
         const isCorrect = parseInt(answer) === puzzle.answer;
         const timeTaken = Date.now() - puzzle.startTime;
 
-        this.activeSessions.delete(session.gameId);
-        await GameSession.deleteOne({ gameId: session.gameId });
+        // Show individual result to the player (ephemeral)
+        if (isCorrect) {
+            await interaction.reply({ 
+                content: `✅ **Correct!** You answered in ${(timeTaken / 1000).toFixed(2)}s`, 
+                ephemeral: true 
+            });
+        } else {
+            await interaction.reply({ 
+                content: `❌ **Wrong!** You guessed ${answer}, but the answer is ${puzzle.answer}`, 
+                ephemeral: true 
+            });
+        }
 
-        const color = isCorrect ? 0x2ECC71 : 0xE74C3C;
-        const title = isCorrect ? '🧩 Logic Grid - Solved!' : '🧩 Logic Grid - Wrong Answer!';
+        this.activeSessions.set(session.gameId, session);
+
+        // Check if all players have answered
+        const allAnswered = session.players.every(p => session.gameData.answered[p.odUserId] !== undefined);
         
-        const embed = new EmbedBuilder()
-            .setColor(color)
-            .setTitle(title)
-            .setDescription(isCorrect 
-                ? `${this.getComment('gameEnd')}\n\n✅ **Correct!** The answer was **${puzzle.answer}**`
-                : `❌ The correct answer was **${puzzle.answer}**\n\nSequence: ${puzzle.sequence.join(' → ')} → **${puzzle.answer}**`)
-            .addFields(
-                { name: 'Time', value: `${(timeTaken / 1000).toFixed(2)}s`, inline: true },
-                { name: 'Hints Used', value: `${puzzle.hintsGiven}`, inline: true }
-            )
-            .setTimestamp();
+        if (allAnswered) {
+            this.activeSessions.delete(session.gameId);
+            await GameSession.deleteOne({ gameId: session.gameId });
 
-        await interaction.update({ embeds: [embed], components: [] });
+            // Calculate results
+            const results = session.players.map(p => {
+                const ans = session.gameData.answered[p.odUserId];
+                const correct = ans === puzzle.answer;
+                return { ...p, answer: ans, correct };
+            });
 
-        // Save result
-        const score = isCorrect ? Math.max(100 - puzzle.hintsGiven * 20, 20) : 0;
-        for (const player of session.players) {
-            await this.saveGameResult(session, player.odUserId, player.username, score, isCorrect);
+            const winners = results.filter(r => r.correct);
+            const color = winners.length > 0 ? 0x2ECC71 : 0xE74C3C;
+            const title = winners.length > 0 ? '🧩 Logic Grid - Solved!' : '🧩 Logic Grid - Nobody Got It!';
+            
+            let resultsText = results.map(r => 
+                `${r.correct ? '✅' : '❌'} **${r.username}**: ${r.answer}`
+            ).join('\n');
+
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(title)
+                .setDescription(`**Answer:** ${puzzle.answer}\n\nSequence: ${puzzle.sequence.join(' → ')} → **${puzzle.answer}**\n\n**Results:**\n${resultsText}`)
+                .addFields(
+                    { name: 'Hints Used', value: `${puzzle.hintsGiven}`, inline: true }
+                )
+                .setTimestamp();
+
+            try {
+                const channel = await interaction.client.channels.fetch(session.channelId);
+                const msg = await channel.messages.fetch(session.messageId);
+                await msg.edit({ embeds: [embed], components: [] });
+            } catch {}
+
+            // Save result
+            const score = Math.max(100 - puzzle.hintsGiven * 20, 20);
+            for (const r of results) {
+                await this.saveGameResult(session, r.odUserId, r.username, r.correct ? score : 0, r.correct);
+            }
+
+            await this.postToGameResults(interaction.guild, embed);
         }
 
         await this.postToGameResults(interaction.guild, embed);

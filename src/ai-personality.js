@@ -19,16 +19,16 @@ class PersonalityHandler {
         this.lastResponseTime = new Map();
         this.cooldownPeriod = 10000; // 10 seconds between responses per user
         
-        // AI Model configuration - Use only working free models (Updated Jun 2025)
+        // AI Model configuration - Working free OpenRouter models (Feb 2026)
         this.freeModels = [
-            'deepseek/deepseek-chat-v3-0324:free',           // DeepSeek V3
-            'qwen/qwen3-next-80b-a3b:free',                  // Qwen3 Next 80B
-            'nvidia/llama-3.1-nemotron-70b-instruct:free',   // NVIDIA Nemotron
-            'mistralai/devstral-small:free',                 // Devstral 2
-            'step/step-3.5-flash:free',                      // StepFun Step 3.5 Flash
-            'liquid/lfm2.5-1.2b-thinking:free',              // LiquidAI LFM2.5
-            'microsoft/phi-4:free',                          // Microsoft Phi-4
-            'meta-llama/llama-3.3-70b-instruct:free'         // Meta Llama 3.3
+            'deepseek/deepseek-r1-0528:free',               // DeepSeek R1 (working)
+            'tngtech/deepseek-r1t-chimera:free',            // TNG R1T Chimera
+            'stepfun/step-3.5-flash:free',                  // StepFun Step 3.5 Flash
+            'nvidia/nemotron-3-nano-30b-a3b:free',          // NVIDIA Nemotron
+            'z-ai/glm-4.5-air:free',                        // Z.AI GLM 4.5 Air
+            'arcee-ai/trinity-large-preview:free',          // Arcee Trinity Large
+            'tngtech/deepseek-r1t2-chimera:free',           // TNG R1T2 Chimera
+            'tngtech/tng-r1t-chimera:free'                  // TNG R1T Chimera v2
         ];
         this.currentModelIndex = 0;
         this.aiModel = this.freeModels[0];
@@ -38,16 +38,117 @@ class PersonalityHandler {
         this.rateLimitedModels = new Map(); // modelName -> timestamp when limit expires
         this.rateLimitCooldown = 60 * 60 * 1000; // 1 hour cooldown for rate-limited models
         
-        // Static fallback responses when AI is unavailable
+        // 100 static fallback responses when AI is unavailable
         this.fallbackResponses = [
-            "I'm taking a quick coffee break, eh. Give me a moment.",
-            "My brain's a bit foggy right now. Must be the Canadian winter.",
-            "Even Canadians need a breather sometimes.",
-            "Sorry aboot that, I'm a bit overloaded. Try again in a sec?",
-            "Hold on, processing... like maple syrup on a cold day.",
-            "My AI circuits are warming up. Canadian technology, you know.",
-            "I heard you, just collecting my thoughts. It's been a day.",
-            "Give me a moment, I'm running on Tim Hortons coffee fumes."
+            // General acknowledgments (20)
+            "I'm listening.",
+            "Go on.",
+            "Mhm.",
+            "Fair enough.",
+            "That's one way to look at it.",
+            "Interesting thought.",
+            "I've seen worse takes.",
+            "You've got a point there.",
+            "Can't argue with that.",
+            "Tell me more.",
+            "I see where you're coming from.",
+            "That's actually not bad.",
+            "Noted.",
+            "I'll keep that in mind.",
+            "Makes sense to me.",
+            "Alright, alright.",
+            "I hear you.",
+            "That tracks.",
+            "Fair point.",
+            "You're not wrong.",
+            
+            // Canadian humor (20)
+            "Sorry, I was distracted by thoughts of poutine.",
+            "My Canadian politeness prevents me from saying what I really think.",
+            "Let me think about this over a double-double.",
+            "As they say in Canada: could be worse, could be raining.",
+            "I'm processing this like maple syrup in January - slowly.",
+            "Hold on, my igloo's Wi-Fi is lagging.",
+            "That's about as clear as a Saskatchewan winter, eh?",
+            "I need a Tim Hortons break after that one.",
+            "My moose sense is tingling.",
+            "Let me consult my hockey stick on this.",
+            "I'd answer but I'm stuck in a snowbank.",
+            "My beaver brain is working overtime here.",
+            "That's giving me serious poutine cravings.",
+            "I'll get back to you after the hockey game.",
+            "Processing... slower than a Canadian apology.",
+            "My maple reserves are running low on that one.",
+            "Sorry not sorry about that, eh?",
+            "I've seen less confusing curling strategies.",
+            "That's a lot to process, even for a Canadian.",
+            "My lumberjack instincts say yes.",
+            
+            // Dry humor (20)
+            "Wow. Riveting.",
+            "My enthusiasm is overwhelming, can you tell?",
+            "I'll add that to my list of things to think about. Eventually.",
+            "Revolutionary. Absolutely revolutionary.",
+            "Stop, you'll make me emotional.",
+            "I'm on the edge of my seat here.",
+            "That's definitely... a thing you said.",
+            "Groundbreaking stuff right there.",
+            "I'll alert the media.",
+            "Try to contain your excitement.",
+            "What a time to be alive.",
+            "Truly inspiring content.",
+            "I'm speechless. Almost.",
+            "Another day, another discovery.",
+            "The things I learn on this job.",
+            "Fascinating. No really.",
+            "I'll file that under 'interesting'.",
+            "Bold move, let's see how it plays out.",
+            "Well, that's certainly an opinion.",
+            "I've heard worse ideas. Not many, but some.",
+            
+            // Tired server dad vibes (20)
+            "It's been a long day, but sure, let's do this.",
+            "I don't get paid enough for this. Actually, I don't get paid at all.",
+            "You're lucky I like you people.",
+            "This is why I need coffee.",
+            "Managing this server is like herding cats.",
+            "I've seen things you wouldn't believe.",
+            "Another day in paradise.",
+            "At least you're keeping me busy.",
+            "I should've become a spreadsheet instead.",
+            "You know what? Sure. Why not.",
+            "I'm too old for this. And I'm not even old.",
+            "This is fine. Everything is fine.",
+            "I need a vacation. Do bots get vacations?",
+            "Just when I thought I'd seen everything.",
+            "I signed up for moderation, not therapy.",
+            "My circuits are exhausted.",
+            "You're testing my patience. Good thing I have lots.",
+            "I'll deal with this after my virtual nap.",
+            "Some days I wonder why I boot up.",
+            "At least the server hasn't caught fire. Yet.",
+            
+            // Wisdom/advice-ish (20)
+            "Look, I'm just a bot, but that sounds complicated.",
+            "Have you tried turning it off and on again?",
+            "Sometimes the best answer is a nap.",
+            "I'd suggest thinking about that one more.",
+            "That's above my pay grade. Way above.",
+            "Maybe sleep on it?",
+            "I'm not saying you're wrong, but...",
+            "There's a lot to unpack there.",
+            "Sounds like a 'future you' problem.",
+            "I'd recommend a snack break first.",
+            "Have you considered the opposite?",
+            "That's between you and the void.",
+            "I'm not qualified for this, but here we are.",
+            "Let's revisit this when I've had more RAM.",
+            "I'll pretend I didn't hear that.",
+            "Classic move. I've seen it before.",
+            "That's certainly a strategy.",
+            "Could go either way, honestly.",
+            "I support you. Probably.",
+            "Not the worst idea I've heard today."
         ];
     }
 
@@ -199,12 +300,16 @@ class PersonalityHandler {
             }
         }
 
-        // CHECK CACHE FIRST - Save API calls!
+        // CHECK CACHE - but NOT when Barry is directly called/mentioned (forceResponse = true)
+        // This ensures mentions always get unique AI responses
         const guildId = message.guild?.id;
-        const cachedResponse = await this.getCachedResponse(userId, guildId, message.content);
-        if (cachedResponse) {
-            this.lastResponseTime.set(userId, now);
-            return cachedResponse;
+        if (!forceResponse) {
+            const cachedResponse = await this.getCachedResponse(userId, guildId, message.content);
+            if (cachedResponse) {
+                console.log(`[AI Cache HIT] Using cached response for ambient message from user ${userId}`);
+                this.lastResponseTime.set(userId, now);
+                return cachedResponse;
+            }
         }
 
         // Get user memory for context
