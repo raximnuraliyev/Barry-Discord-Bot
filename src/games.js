@@ -593,23 +593,11 @@ class GameHandler {
         const color = completed ? 0x2ECC71 : 0xE74C3C;
         const title = completed ? '🧠 Mind Lock - Champion!' : '🧠 Mind Lock - Game Over!';
         
-        // Find who made mistakes by comparing inputs to correct sequence
-        const correctSequence = session.gameData.sequence.join(' ');
-        const wrongPlayers = session.players.filter(p => {
-            const pInput = session.gameData.playerInputs[p.odUserId]?.join(' ') || '';
-            return pInput !== correctSequence;
-        });
-        
-        // Build description based on game outcome
-        let description;
-        if (completed) {
-            description = `**${winner.username}** completed all 5 rounds!`;
-        } else if (wrongPlayers.length > 0) {
-            const wrongNames = wrongPlayers.map(p => `**${p.username}**`).join(', ');
-            description = `${wrongNames} made a mistake!`;
-        } else {
-            description = `Game ended!`;
-        }
+        // Get the player who made a mistake (if game ended due to wrong answer)
+        const lastPlayer = session.players[0]; // For single player or find current player
+        const description = completed 
+            ? `**${winner.username}** completed all 5 rounds!`
+            : `**${lastPlayer.username}** made a mistake!`;
 
         const embed = new EmbedBuilder()
             .setColor(color)
@@ -2054,6 +2042,8 @@ class GameHandler {
 
             await this.postToGameResults(interaction.guild, embed);
         }
+
+        await this.postToGameResults(interaction.guild, embed);
     }
 
     async handleLogicGridHint(interaction, session) {

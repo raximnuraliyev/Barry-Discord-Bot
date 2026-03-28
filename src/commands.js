@@ -1004,35 +1004,27 @@ class CommandHandler {
     }
 
     async handleBan(interaction) {
-        // Defer immediately to prevent timeout
-        await interaction.deferReply();
-        
         const user = interaction.options.getUser('user');
         const reason = interaction.options.getString('reason');
 
-        try {
-            const result = await this.moderation.manualBan(
-                interaction.guild,
-                user,
-                interaction.user,
-                reason
-            );
+        const result = await this.moderation.manualBan(
+            interaction.guild,
+            user,
+            interaction.user,
+            reason
+        );
 
-            const embed = new EmbedBuilder()
-                .setColor(0xFF0000)
-                .setTitle('User Banned')
-                .setDescription(`${user.tag} has been banned.`)
-                .addFields(
-                    { name: 'Reason', value: reason, inline: false },
-                    { name: 'Case', value: `#${result.case.caseId}`, inline: true }
-                )
-                .setTimestamp();
+        const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('User Banned')
+            .setDescription(`${user.tag} has been banned.`)
+            .addFields(
+                { name: 'Reason', value: reason, inline: false },
+                { name: 'Case', value: `#${result.case.caseId}`, inline: true }
+            )
+            .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed] });
-        } catch (error) {
-            console.error('Ban error:', error);
-            await interaction.editReply({ content: `Failed to ban user: ${error.message}` });
-        }
+        await interaction.reply({ embeds: [embed] });
     }
 
     async handleUnban(interaction) {
@@ -1099,8 +1091,7 @@ class CommandHandler {
 
     async handleCases(interaction) {
         const user = interaction.options.getUser('user');
-        const page = interaction.options.getInteger('page') || 1;
-        const perPage = 10;
+        const limit = interaction.options.getInteger('limit') || 10;
 
         let cases;
         let title;
@@ -1109,7 +1100,7 @@ class CommandHandler {
             cases = await this.database.getUserCases(user.id, interaction.guild.id);
             title = `Cases for ${user.tag}`;
         } else {
-            cases = await this.database.getRecentCases(interaction.guild.id, 100);
+            cases = await this.database.getRecentCases(interaction.guild.id, limit);
             title = 'Recent Cases';
         }
 
@@ -1117,11 +1108,7 @@ class CommandHandler {
             return await interaction.reply({ content: 'No cases found.', ephemeral: true });
         }
 
-        const totalPages = Math.ceil(cases.length / perPage);
-        const startIdx = (page - 1) * perPage;
-        const pageCases = cases.slice(startIdx, startIdx + perPage);
-
-        const caseList = pageCases.map(c => 
+        const caseList = cases.slice(0, limit).map(c => 
             `**#${c.caseId}** | ${c.action.toUpperCase()} | <@${c.userId}> | ${c.reason?.substring(0, 50) || 'No reason'}...`
         ).join('\n');
 
@@ -1129,30 +1116,10 @@ class CommandHandler {
             .setColor(0x5865F2)
             .setTitle(title)
             .setDescription(caseList)
-            .setFooter({ text: `Page ${page}/${totalPages} • ${cases.length} total cases` })
+            .setFooter({ text: `Showing ${Math.min(cases.length, limit)} of ${cases.length} cases` })
             .setTimestamp();
 
-        // Pagination buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`cases_prev_${user?.id || 'all'}_${page}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`cases_page_${user?.id || 'all'}_${page}`)
-                    .setLabel(`${page}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`cases_next_${user?.id || 'all'}_${page}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= totalPages)
-            );
-
-        await interaction.reply({ embeds: [embed], components: totalPages > 1 ? [row] : [], ephemeral: true });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     // ===========================================
@@ -1233,7 +1200,7 @@ class CommandHandler {
         const wordList = pageWords.map((w, i) => {
             const source = (!w.addedBy || w.addedBy === 'system') ? '📦' : '✏️';
             const severityIcon = w.severity === 'high' ? '🔴' : w.severity === 'medium' ? '🟡' : '🟢';
-            return `${source} ||${w.word}|| ${severityIcon} ${w.defaultAction}`;
+            return `${source} \`${w.word}\` ${severityIcon} ${w.defaultAction}`;
         }).join('\n');
 
         const embed = new EmbedBuilder()
@@ -1305,7 +1272,7 @@ class CommandHandler {
         const wordList = pageWords.map((w, i) => {
             const source = (!w.addedBy || w.addedBy === 'system') ? '📦' : '✏️';
             const severityIcon = w.severity === 'high' ? '🔴' : w.severity === 'medium' ? '🟡' : '🟢';
-            return `${source} ||${w.word}|| ${severityIcon} ${w.defaultAction}`;
+            return `${source} \`${w.word}\` ${severityIcon} ${w.defaultAction}`;
         }).join('\n');
 
         const embed = new EmbedBuilder()
@@ -1642,9 +1609,8 @@ class CommandHandler {
             throw error;
         }
         
-        const page = interaction.options.getInteger('page') || 1;
-        const perPage = 10;
-        const logs = await this.database.getAuditLog(interaction.guild.id, 100);
+        const limit = interaction.options.getInteger('limit') || 20;
+        const logs = await this.database.getAuditLog(interaction.guild.id, limit);
 
         if (!logs || logs.length === 0) {
             return await interaction.editReply({ content: 'No audit log entries found for this server.' });
@@ -1666,11 +1632,7 @@ class CommandHandler {
             'default': '📋'
         };
 
-        const totalPages = Math.ceil(logs.length / perPage);
-        const startIdx = (page - 1) * perPage;
-        const pageLogs = logs.slice(startIdx, startIdx + perPage);
-
-        const logEntries = pageLogs.map(l => {
+        const logEntries = logs.slice(0, 15).map(l => {
             const icon = actionIcons[l.actionType?.toLowerCase()] || actionIcons['default'];
             const time = `<t:${Math.floor(new Date(l.timestamp).getTime() / 1000)}:R>`;
             const target = l.targetUserId ? `<@${l.targetUserId}>` : '';
@@ -1685,33 +1647,13 @@ class CommandHandler {
             .setDescription(logEntries || 'No entries')
             .addFields(
                 { name: 'Server ID', value: interaction.guild.id, inline: true },
-                { name: 'Page', value: `${page}/${totalPages}`, inline: true },
-                { name: 'Total', value: `${logs.length}`, inline: true }
+                { name: 'Total Shown', value: `${Math.min(logs.length, 15)}`, inline: true },
+                { name: 'Requested', value: `${limit}`, inline: true }
             )
             .setFooter({ text: 'Barry Bot Audit Log • Actions are server-specific' })
             .setTimestamp();
 
-        // Pagination buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_prev_${page}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_page_${page}`)
-                    .setLabel(`${page}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_next_${page}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= totalPages)
-            );
-
-        await interaction.editReply({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     // ===========================================
@@ -1896,51 +1838,25 @@ class CommandHandler {
             await interaction.reply({ embeds: [embed] });
 
         } else if (subcommand === 'list') {
-            const page = interaction.options.getInteger('page') || 1;
-            const perPage = 10;
             const activeUsers = await this.database.getActiveUsers(guildId);
 
             if (!activeUsers || activeUsers.length === 0) {
                 return await interaction.reply({ content: 'No active users configured.', ephemeral: true });
             }
 
-            const totalPages = Math.ceil(activeUsers.length / perPage);
-            const startIdx = (page - 1) * perPage;
-            const pageUsers = activeUsers.slice(startIdx, startIdx + perPage);
-
-            const userList = pageUsers.map((u, i) => {
+            const userList = activeUsers.map((u, i) => {
                 const addedDate = u.addedAt ? `<t:${Math.floor(u.addedAt.getTime() / 1000)}:R>` : 'Unknown';
-                return `**${startIdx + i + 1}.** <@${u.userId}> (${u.username})\n   └ Added by ${u.addedBy} ${addedDate}\n   └ *${u.reason || 'No reason'}*`;
+                return `**${i + 1}.** <@${u.userId}> (${u.username})\n   └ Added by ${u.addedBy} ${addedDate}\n   └ *${u.reason || 'No reason'}*`;
             }).join('\n\n');
 
             const embed = new EmbedBuilder()
                 .setColor(0x3498DB)
                 .setTitle('🛡️ Active Users (Auto-mod Immune)')
                 .setDescription(userList)
-                .setFooter({ text: `Page ${page}/${totalPages} • ${activeUsers.length} active user(s) • Mods can still manually moderate these users` })
+                .setFooter({ text: `${activeUsers.length} active user(s) • Mods can still manually moderate these users` })
                 .setTimestamp();
 
-            // Pagination buttons
-            const row = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`activeusers_prev_${page}`)
-                        .setLabel('◀ Previous')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(page <= 1),
-                    new ButtonBuilder()
-                        .setCustomId(`activeusers_page_${page}`)
-                        .setLabel(`${page}/${totalPages}`)
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(true),
-                    new ButtonBuilder()
-                        .setCustomId(`activeusers_next_${page}`)
-                        .setLabel('Next ▶')
-                        .setStyle(ButtonStyle.Secondary)
-                        .setDisabled(page >= totalPages)
-                );
-
-            await interaction.reply({ embeds: [embed], components: totalPages > 1 ? [row] : [], ephemeral: true });
+            await interaction.reply({ embeds: [embed] });
         }
     }
 
@@ -1982,27 +1898,7 @@ class CommandHandler {
             .setFooter({ text: `Page ${page}/${totalPages} • ${warns.length} total warnings` })
             .setTimestamp();
 
-        // Pagination buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`warns_prev_${filterUser?.id || 'all'}_${page}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`warns_page_${filterUser?.id || 'all'}_${page}`)
-                    .setLabel(`${page}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`warns_next_${filterUser?.id || 'all'}_${page}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= totalPages)
-            );
-
-        await interaction.reply({ embeds: [embed], components: totalPages > 1 ? [row] : [], ephemeral: true });
+        await interaction.reply({ embeds: [embed] });
     }
 
     async handleBans(interaction) {
@@ -2033,27 +1929,7 @@ class CommandHandler {
             .setFooter({ text: `Page ${page}/${totalPages} • ${bans.length} total bans` })
             .setTimestamp();
 
-        // Pagination buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`bans_prev_${page}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`bans_page_${page}`)
-                    .setLabel(`${page}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`bans_next_${page}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= totalPages)
-            );
-
-        await interaction.reply({ embeds: [embed], components: totalPages > 1 ? [row] : [], ephemeral: true });
+        await interaction.reply({ embeds: [embed] });
     }
 
     async handleMutes(interaction) {
@@ -2104,27 +1980,7 @@ class CommandHandler {
             .setFooter({ text: `Page ${page}/${totalPages} • ${mutes.length} total` })
             .setTimestamp();
 
-        // Pagination buttons
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`mutes_prev_${activeOnly ? 'active' : 'all'}_${page}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`mutes_page_${activeOnly ? 'active' : 'all'}_${page}`)
-                    .setLabel(`${page}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`mutes_next_${activeOnly ? 'active' : 'all'}_${page}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(page >= totalPages)
-            );
-
-        await interaction.reply({ embeds: [embed], components: totalPages > 1 ? [row] : [], ephemeral: true });
+        await interaction.reply({ embeds: [embed] });
     }
 
     // ===========================================
@@ -2701,336 +2557,6 @@ class CommandHandler {
         }
     }
 
-    // Warns pagination handler
-    async handleWarnsPagination(interaction, userFilter, page) {
-        const guildId = interaction.guild.id;
-        const perPage = 10;
-
-        let warns;
-        if (userFilter !== 'all') {
-            warns = await this.database.getCases(guildId, userFilter, 50);
-            warns = warns.filter(c => c.action === 'warn');
-        } else {
-            warns = await this.database.getWarnList(guildId, 100);
-        }
-
-        const totalPages = Math.ceil(warns.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageWarns = warns.slice(startIdx, startIdx + perPage);
-
-        const warnList = pageWarns.map((w, i) => {
-            const date = w.timestamp ? `<t:${Math.floor(new Date(w.timestamp).getTime() / 1000)}:d>` : '?';
-            const mod = w.automated ? '🤖 Auto' : w.moderator || 'Unknown';
-            return `\`${w.caseId || '?'}\` <@${w.userId}> • ${date}\n└ **${w.reason || 'No reason'}** *(${mod})*`;
-        }).join('\n\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0xF1C40F)
-            .setTitle(`⚠️ Warnings`)
-            .setDescription(warnList || 'No warnings to display.')
-            .setFooter({ text: `Page ${currentPage}/${totalPages} • ${warns.length} total warnings` })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`warns_prev_${userFilter}_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`warns_page_${userFilter}_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`warns_next_${userFilter}_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
-    // Bans pagination handler
-    async handleBansPagination(interaction, page) {
-        const guildId = interaction.guild.id;
-        const perPage = 10;
-
-        const bans = await this.database.getBanList(guildId, 100);
-
-        const totalPages = Math.ceil(bans.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageBans = bans.slice(startIdx, startIdx + perPage);
-
-        const banList = pageBans.map((b, i) => {
-            const date = b.timestamp ? `<t:${Math.floor(new Date(b.timestamp).getTime() / 1000)}:d>` : '?';
-            const mod = b.automated ? '🤖 Auto' : b.moderator || 'Unknown';
-            return `\`${b.caseId || '?'}\` <@${b.userId}> • ${date}\n└ **${b.reason || 'No reason'}** *(${mod})*`;
-        }).join('\n\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0xE74C3C)
-            .setTitle('🔨 Bans')
-            .setDescription(banList || 'No bans to display.')
-            .setFooter({ text: `Page ${currentPage}/${totalPages} • ${bans.length} total bans` })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`bans_prev_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`bans_page_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`bans_next_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
-    // Mutes pagination handler
-    async handleMutesPagination(interaction, activeFilter, page) {
-        const guildId = interaction.guild.id;
-        const perPage = 10;
-        const activeOnly = activeFilter === 'active';
-
-        let mutes;
-        if (activeOnly) {
-            mutes = await this.database.getActiveMutes(guildId);
-        } else {
-            mutes = await this.database.getMuteList(guildId, 100);
-        }
-
-        const totalPages = Math.ceil(mutes.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageMutes = mutes.slice(startIdx, startIdx + perPage);
-
-        let muteList;
-        if (activeOnly) {
-            muteList = pageMutes.map((m, i) => {
-                const until = m.mutedUntil ? `<t:${Math.floor(m.mutedUntil.getTime() / 1000)}:R>` : 'Indefinite';
-                return `<@${m.userId}>\n└ Expires: ${until}`;
-            }).join('\n\n');
-        } else {
-            muteList = pageMutes.map((m, i) => {
-                const date = m.timestamp ? `<t:${Math.floor(new Date(m.timestamp).getTime() / 1000)}:d>` : '?';
-                const mod = m.automated ? '🤖 Auto' : m.moderator || 'Unknown';
-                const duration = m.duration ? `${m.duration}min` : 'N/A';
-                return `\`${m.caseId || '?'}\` <@${m.userId}> • ${date} • ${duration}\n└ **${m.reason || 'No reason'}** *(${mod})*`;
-            }).join('\n\n');
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(0xFF8C00)
-            .setTitle(activeOnly ? '🔇 Active Mutes' : '🔇 Mute History')
-            .setDescription(muteList || 'No mutes to display.')
-            .setFooter({ text: `Page ${currentPage}/${totalPages} • ${mutes.length} total` })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`mutes_prev_${activeFilter}_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`mutes_page_${activeFilter}_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`mutes_next_${activeFilter}_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
-    // Cases pagination handler
-    async handleCasesPagination(interaction, userFilter, page) {
-        const guildId = interaction.guild.id;
-        const perPage = 10;
-
-        let cases;
-        let title;
-
-        if (userFilter !== 'all') {
-            cases = await this.database.getUserCases(userFilter, guildId);
-            title = 'User Cases';
-        } else {
-            cases = await this.database.getRecentCases(guildId, 100);
-            title = 'Recent Cases';
-        }
-
-        const totalPages = Math.ceil(cases.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageCases = cases.slice(startIdx, startIdx + perPage);
-
-        const caseList = pageCases.map(c => 
-            `**#${c.caseId}** | ${c.action.toUpperCase()} | <@${c.userId}> | ${c.reason?.substring(0, 50) || 'No reason'}...`
-        ).join('\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle(title)
-            .setDescription(caseList)
-            .setFooter({ text: `Page ${currentPage}/${totalPages} • ${cases.length} total cases` })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`cases_prev_${userFilter}_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`cases_page_${userFilter}_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`cases_next_${userFilter}_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
-    // Audit log pagination handler
-    async handleAuditLogPagination(interaction, page) {
-        const perPage = 10;
-        const logs = await this.database.getAuditLog(interaction.guild.id, 100);
-
-        const actionIcons = {
-            'warn': '⚠️',
-            'mute': '🔇',
-            'unmute': '🔊',
-            'ban': '🔨',
-            'unban': '🔓',
-            'kick': '👢',
-            'timeout': '⏱️',
-            'delete': '🗑️',
-            'addword': '➕',
-            'removeword': '➖',
-            'settings': '⚙️',
-            'appeal': '📝',
-            'default': '📋'
-        };
-
-        const totalPages = Math.ceil(logs.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageLogs = logs.slice(startIdx, startIdx + perPage);
-
-        const logEntries = pageLogs.map(l => {
-            const icon = actionIcons[l.actionType?.toLowerCase()] || actionIcons['default'];
-            const time = `<t:${Math.floor(new Date(l.timestamp).getTime() / 1000)}:R>`;
-            const target = l.targetUserId ? `<@${l.targetUserId}>` : '';
-            const performer = l.performedBy || 'Barry (Auto)';
-            const details = l.details ? ` - ${l.details.substring(0, 50)}` : '';
-            return `${icon} **${l.actionType?.toUpperCase() || 'ACTION'}** ${time}\n   By: ${performer} ${target ? `| Target: ${target}` : ''}${details}`;
-        }).join('\n\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0x2F3136)
-            .setTitle(`📜 Audit Log - ${interaction.guild.name}`)
-            .setDescription(logEntries || 'No entries')
-            .addFields(
-                { name: 'Server ID', value: interaction.guild.id, inline: true },
-                { name: 'Page', value: `${currentPage}/${totalPages}`, inline: true },
-                { name: 'Total', value: `${logs.length}`, inline: true }
-            )
-            .setFooter({ text: 'Barry Bot Audit Log • Actions are server-specific' })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_prev_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_page_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`auditlog_next_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
-    // Active users pagination handler
-    async handleActiveUsersPagination(interaction, page) {
-        const guildId = interaction.guild.id;
-        const perPage = 10;
-        const activeUsers = await this.database.getActiveUsers(guildId);
-
-        const totalPages = Math.ceil(activeUsers.length / perPage);
-        const currentPage = Math.max(1, Math.min(page, totalPages));
-        const startIdx = (currentPage - 1) * perPage;
-        const pageUsers = activeUsers.slice(startIdx, startIdx + perPage);
-
-        const userList = pageUsers.map((u, i) => {
-            const addedDate = u.addedAt ? `<t:${Math.floor(u.addedAt.getTime() / 1000)}:R>` : 'Unknown';
-            return `**${startIdx + i + 1}.** <@${u.userId}> (${u.username})\n   └ Added by ${u.addedBy} ${addedDate}\n   └ *${u.reason || 'No reason'}*`;
-        }).join('\n\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
-            .setTitle('🛡️ Active Users (Auto-mod Immune)')
-            .setDescription(userList)
-            .setFooter({ text: `Page ${currentPage}/${totalPages} • ${activeUsers.length} active user(s) • Mods can still manually moderate these users` })
-            .setTimestamp();
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`activeusers_prev_${currentPage}`)
-                    .setLabel('◀ Previous')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage <= 1),
-                new ButtonBuilder()
-                    .setCustomId(`activeusers_page_${currentPage}`)
-                    .setLabel(`${currentPage}/${totalPages}`)
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(true),
-                new ButtonBuilder()
-                    .setCustomId(`activeusers_next_${currentPage}`)
-                    .setLabel('Next ▶')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(currentPage >= totalPages)
-            );
-
-        await interaction.update({ embeds: [embed], components: totalPages > 1 ? [row] : [] });
-    }
-
     // Game button handler - called from index.js
     async handleGameButton(interaction) {
         const customId = interaction.customId;
@@ -3184,68 +2710,6 @@ class CommandHandler {
                 
                 // Re-run the ranks query with new page
                 return await this.handleRanksPagination(interaction, gameFilter, newPage);
-            }
-
-            // Warns pagination
-            if (customId.startsWith('warns_prev_') || customId.startsWith('warns_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const userFilter = parts[2];
-                const currentPage = parseInt(parts[3]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleWarnsPagination(interaction, userFilter, newPage);
-            }
-
-            // Bans pagination
-            if (customId.startsWith('bans_prev_') || customId.startsWith('bans_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const currentPage = parseInt(parts[2]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleBansPagination(interaction, newPage);
-            }
-
-            // Mutes pagination
-            if (customId.startsWith('mutes_prev_') || customId.startsWith('mutes_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const activeFilter = parts[2];
-                const currentPage = parseInt(parts[3]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleMutesPagination(interaction, activeFilter, newPage);
-            }
-
-            // Cases pagination
-            if (customId.startsWith('cases_prev_') || customId.startsWith('cases_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const userFilter = parts[2];
-                const currentPage = parseInt(parts[3]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleCasesPagination(interaction, userFilter, newPage);
-            }
-
-            // Audit log pagination
-            if (customId.startsWith('auditlog_prev_') || customId.startsWith('auditlog_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const currentPage = parseInt(parts[2]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleAuditLogPagination(interaction, newPage);
-            }
-
-            // Active users pagination
-            if (customId.startsWith('activeusers_prev_') || customId.startsWith('activeusers_next_')) {
-                const parts = customId.split('_');
-                const direction = parts[1];
-                const currentPage = parseInt(parts[2]);
-                const newPage = direction === 'prev' ? currentPage - 1 : currentPage + 1;
-                return await this.handleActiveUsersPagination(interaction, newPage);
-            }
-
-            // Listwords pagination
-            if (customId.startsWith('listwords_prev_') || customId.startsWith('listwords_next_')) {
-                return await this.handleListWordsButton(interaction);
             }
 
         } catch (error) {
