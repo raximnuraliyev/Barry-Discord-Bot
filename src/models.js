@@ -518,6 +518,58 @@ const aiPromptCacheSchema = new mongoose.Schema({
 aiPromptCacheSchema.index({ guildId: 1, userId: 1, promptHash: 1 }, { unique: true });
 aiPromptCacheSchema.index({ createdAt: 1 }, { expireAfterSeconds: 604800 }); // 7 days TTL
 
+// ==========================================
+// PET ECOSYSTEM MODELS
+// ==========================================
+
+const serverPetSchema = new mongoose.Schema({
+    serverId: { type: String, required: true },
+    petType: { type: String, required: true },
+    petName: { type: String, default: 'Unnamed Pet' },
+    phase: { type: Number, default: 1 },
+    incubationDaysRemaining: { type: Number, default: 5 },
+    warmthScore: { type: Number, default: 0 },
+    warmthLastReset: { type: Date },
+    phaseUpgradedAt: { type: Date },
+    lastStatUpdate: { type: Date },
+    stats: {
+        hunger: { type: Number, default: 0 },
+        energy: { type: Number, default: 100 },
+        happiness: { type: Number, default: 100 },
+        cleanliness: { type: Number, default: 100 }
+    },
+    flags: {
+        isHoarding: { type: Boolean, default: false },
+        onExpedition: { type: Boolean, default: false }
+    },
+    chaosEventActive: { type: Boolean, default: false },
+    chaosEventEndTime: { type: Date },
+    hoardedPoints: { type: Number, default: 0 },
+    expeditionEndTime: { type: Date },
+    lastExpeditionLoot: { type: String }
+});
+
+const petInventorySchema = new mongoose.Schema({
+    serverId: { type: String, required: true },
+    userId: { type: String, required: true },
+    items: [
+        {
+            itemId: { type: String },
+            quantity: { type: Number, default: 1 },
+            acquiredAt: { type: Date, default: Date.now }
+        }
+    ]
+});
+
+const petInteractionSchema = new mongoose.Schema({
+    serverId: { type: String, required: true },
+    userId: { type: String, required: true },
+    actionType: { type: String, required: true },
+    resultData: { type: mongoose.Schema.Types.Mixed },
+    pointsContributed: { type: Number },
+    timestamp: { type: Date, default: Date.now }
+});
+
 module.exports = {
     // Layer 1: Rules
     OffensiveWord: mongoose.model('OffensiveWord', offensiveWordSchema),
@@ -553,5 +605,9 @@ module.exports = {
     // Active Users (immune to auto-mod)
     ActiveUser: mongoose.model('ActiveUser', activeUserSchema),
     // AI System
-    AIPromptCache: mongoose.model('AIPromptCache', aiPromptCacheSchema)
+    AIPromptCache: mongoose.model('AIPromptCache', aiPromptCacheSchema),
+    // Pet Ecosystem
+    ServerPet: mongoose.model('ServerPet', serverPetSchema),
+    PetInventory: mongoose.model('PetInventory', petInventorySchema),
+    PetInteraction: mongoose.model('PetInteraction', petInteractionSchema)
 };

@@ -3,6 +3,7 @@ const DatabaseHandler = require('./database');
 const ModerationHandler = require('./moderation');
 const PersonalityHandler = require('./ai-personality');
 const GameHandler = require('./games');
+const PetHandler = require('./petHandler');
 const reminders = require('./reminders');
 
 class CommandHandler {
@@ -11,7 +12,10 @@ class CommandHandler {
         this.moderation = new ModerationHandler();
         this.personality = new PersonalityHandler();
         this.games = new GameHandler();
-        
+        this.pets = new PetHandler();
+        // Initialize Pet Ecosystem cron jobs
+        this.pets.initialize();
+
         this.commands = [
             // ===========================================
             // AI & INTERACTION COMMANDS
@@ -539,6 +543,34 @@ class CommandHandler {
                 .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
 
             // ===========================================
+            // PET ECOSYSTEM COMMANDS
+            // ===========================================
+            new SlashCommandBuilder()
+                .setName('pet')
+                .setDescription('View and interact with the server pet'),
+
+            new SlashCommandBuilder()
+                .setName('spawnpet')
+                .setDescription('Spawn a new pet for the server (Admin only)')
+                .addStringOption(option =>
+                    option.setName('type')
+                        .setDescription('Select the pet species')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '🐈 The Black Cat', value: 'black_cat' },
+                            { name: '🐕 The Cyber Shiba', value: 'cyber_shiba' },
+                            { name: '🦉 The Tech Owl', value: 'tech_owl' },
+                            { name: '🐈 The White Cat', value: 'white_cat' },
+                            { name: '🦠 The Digital Slime', value: 'digital_slime' }
+                        )
+                )
+                .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('aboutpet')
+                .setDescription('Learn how the Pet Ecosystem works'),
+
+            // ===========================================
             // GAME COMMANDS
             // ===========================================
             new SlashCommandBuilder()
@@ -736,6 +768,11 @@ class CommandHandler {
                 // Reminders
                 case 'remindme': return await this.handleRemindMe(interaction);
                 case 'reminders': return await this.handleReminders(interaction);
+
+                // Pet Ecosystem
+                case 'pet': return await this.handlePet(interaction);
+                case 'spawnpet': return await this.handleSpawnPet(interaction);
+                case 'aboutpet': return await this.handleAboutPet(interaction);
                 
                 // Active Users & Moderation Lists
                 case 'activeuser': return await this.handleActiveUser(interaction);
@@ -2718,6 +2755,75 @@ class CommandHandler {
                 await interaction.reply({ content: 'Something went wrong with the game.', ephemeral: true });
             } catch {}
         }
+    }
+
+    // ===========================================
+    // PET ECOSYSTEM COMMANDS
+    // ===========================================
+
+    async handlePet(interaction) {
+        if (!interaction.guildId) {
+            return await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
+        }
+        await interaction.deferReply();
+        try {
+            await this.pets.displayPet(interaction.guildId, interaction.channel);
+            await interaction.deleteReply();
+        } catch (error) {
+            console.error('Error in /pet:', error);
+            try {
+                await interaction.editReply({ content: error.message || 'Failed to display pet.' });
+            } catch (e) {}
+        }
+    }
+
+    async handleSpawnPet(interaction) {
+        try {
+            await interaction.deferReply();
+            const type = interaction.options.getString('type');
+            
+            await this.pets.petEcosystem.spawnPet(interaction.guildId, type);
+            await interaction.editReply(`Successfully spawned a new pet (${type}) for this server! Use \`/pet\` to interact with it.`);
+        } catch (error) {
+            console.error('Spawn pet error:', error);
+            await interaction.editReply(`Failed to spawn pet: ${error.message}`);
+        }
+    }
+
+    async handlePetButton(interaction) {
+        await this.pets.handlePetButton(interaction);
+    }
+
+    async handleAboutPet(interaction) {
+        const embed = new EmbedBuilder()
+            .setColor(0x7289da)
+            .setTitle('🐾 About The Pet Ecosystem')
+            .setDescription('The server pet is a shared companion that evolves through 4 phases, relying on community care to survive and thrive.')
+            .addFields(
+                {
+                    name: '🥚 Phase 1: The Egg',
+                    value: 'The pet starts as a fragile egg. The community must warm it daily (3 times/day). It takes 3 days to hatch. If neglected for 2 days, it dies.'
+                },
+                {
+                    name: '👶 Phase 2: The Baby',
+                    value: 'Once hatched, it becomes a needy baby! Keep its **Hunger**, **Happiness**, and **Cleanliness** balanced. If stats drop too low, it starts "eating" (deleting) random messages in chaos events.\n- 🍼 **Feed** to lower hunger\n- 🧶 **Play** to increase happiness\n- 🧽 **Clean** to increase cleanliness'
+                },
+                {
+                    name: '🧒 Phase 3: The Teen',
+                    value: 'The pet becomes moody and greedy. It hoards points from server members. Users can bribe the pet to boost its happiness and get rare rewards!'
+                },
+                {
+                    name: '🦸 Phase 4: The Adult',
+                    value: 'Fully grown and serving as your Guardian! The community can send it on Expeditions (every 6 hours) to find rare loot, server buffs, and custom badges!'
+                },
+                {
+                    name: '💀 Permadeath',
+                    value: 'Be careful! The pet experiences stat decay over time. If a critical need is unmet for 48 hours, the pet will **die permanently**, and the server must start over.'
+                }
+            )
+            .setFooter({ text: 'Use /pet to see your server\'s current pet!' });
+
+        await interaction.reply({ embeds: [embed] });
     }
 
     // ===========================================

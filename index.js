@@ -1,7 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
-// Removed fs and path; all persistent data is now in MongoDB
-
+const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
 
 // Import modules
 const PersonalityHandler = require('./src/ai-personality');
@@ -60,7 +58,7 @@ class BarryBot {
     setupEventListeners() {
         this.client.once('ready', async () => {
             console.log(`Barry is online! Logged in as ${this.client.user.tag}`);
-            this.client.user.setActivity('Managing the server like a boss', { type: 'WATCHING' });
+            this.client.user.setActivity('Managing the server like a boss', { type: ActivityType.Watching });
             await this.registerCommands();
             // Seed default words for all guilds Barry is in
             for (const guild of this.client.guilds.cache.values()) {
@@ -208,6 +206,11 @@ class BarryBot {
                     // Route listwords pagination buttons
                     if (customId.startsWith('listwords_')) {
                         await this.commands.handleListWordsButton(interaction);
+                    }
+
+                    // Route pet ecosystem buttons
+                    if (customId.startsWith('pet_')) {
+                        await this.commands.handlePetButton(interaction);
                     }
                 }
             } catch (error) {
